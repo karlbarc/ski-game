@@ -1,7 +1,7 @@
 export const PARAMS = {
   gravity: 9.8,
   friction: 0.25,      // rozamiento base de la nieve (m/s²)
-  drag: 0.005,         // resistencia del aire (·v²)
+  drag: 0.0035,        // resistencia del aire (·v²)
   carveBrake: 2.5,     // frenada extra por carving (·|sin(heading)|)
   turnRate: 1.0,       // rad/s con steer a tope
   maxHeading: 1.1,     // rad
@@ -13,7 +13,7 @@ export const PARAMS = {
   fallPenalty: 3.0,    // segundos parado tras caerse
   maxSpeed: 45,
   crawlSpeed: 1.5,      // por debajo de esto, el freno de carving se desactiva (evita soft-lock)
-  tuckAccel: 1.6,       // bono de aceleración al ir en línea (m/s², se desvanece al girar)
+  tuckAccel: 2.4,       // bono de aceleración al ir en línea (m/s², se desvanece al girar)
   tuckWindow: 0.35,     // rad de heading dentro de los cuales aplica el bono
 };
 

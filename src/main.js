@@ -2,7 +2,10 @@ import * as THREE from 'three';
 import { buildTrack, mulberry32 } from './track.js';
 import { verde } from './tracks/verde.js';
 import { createPlayerState, stepPlayer, PARAMS } from './player.js';
-import { createRace, updateRace, pauseRace, resumeRace, formatTime, loadBest, saveBest } from './race.js';
+import {
+  createRace, updateRace, pauseRace, resumeRace, formatTime,
+  loadBest, saveBest, loadBestSpeed, saveBestSpeed,
+} from './race.js';
 import { createControls } from './controls.js';
 import { createHud } from './hud.js';
 import { createSnowSound } from './audio.js';
@@ -60,6 +63,7 @@ let started = false;
 let finishShown = false;
 let paused = false;
 let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
+let runMaxSpeed = 0; // velocidad máxima de la bajada actual (m/s)
 
 const hud = createHud();
 const controls = createControls();
@@ -99,6 +103,7 @@ function restart() {
   finishShown = false;
   paused = false;
   steerSmooth = 0;
+  runMaxSpeed = 0;
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
 }
@@ -128,10 +133,18 @@ function autopilotSteer() {
 function finish() {
   finishShown = true;
   const time = race.elapsed;
+  const maxKmh = Math.round(runMaxSpeed * 3.6);
   const recordEligible = TIMESCALE === 1 && !AUTOPILOT;
   const isRecord = recordEligible ? saveBest(localStorage, track.data.name, time) : false;
+  if (recordEligible) saveBestSpeed(localStorage, track.data.name, maxKmh);
   const best = loadBest(localStorage, track.data.name);
-  hud.showFinish(`Tiempo: ${formatTime(time)}`, `Mejor: ${formatTime(best)}`, isRecord);
+  const bestSpeed = loadBestSpeed(localStorage, track.data.name);
+  hud.showFinish(
+    `Tiempo: ${formatTime(time)}`,
+    `Mejor: ${best == null ? '—' : formatTime(best)}`,
+    `Vel. máx: ${maxKmh} km/h (récord: ${bestSpeed == null ? '—' : `${bestSpeed} km/h`})`,
+    isRecord,
+  );
 }
 
 function updateCamera() {
@@ -166,6 +179,7 @@ function tick(now) {
     const prev = player;
     player = stepPlayer(player, steerSmooth, dt, track);
     race = updateRace(race, player.s, now);
+    if (race.status === 'running') runMaxSpeed = Math.max(runMaxSpeed, player.speed);
     if (player.fallen && !prev.fallen) hud.flash('¡Te has caído!');
     if (player.airborne && !prev.airborne) hud.flash('¡Salto!', 800);
     if (race.status === 'finished' && !finishShown) finish();

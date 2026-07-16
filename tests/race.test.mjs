@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRace, updateRace, pauseRace, resumeRace, formatTime, loadBest, saveBest } from '../src/race.js';
+import {
+  createRace, updateRace, pauseRace, resumeRace, formatTime,
+  loadBest, saveBest, loadBestSpeed, saveBestSpeed,
+} from '../src/race.js';
 
 test('race starts when crossing the start line and finishes at the finish line', () => {
   let r = createRace(15, 700);
@@ -49,6 +52,17 @@ test('pause before the start line and resume without pause are no-ops', () => {
   let r = updateRace(ready, 16, 1000);
   const paused = pauseRace(r, 2000);
   assert.deepEqual(pauseRace(paused, 3000), paused); // doble pausa no re-desplaza
+});
+
+test('saveBestSpeed only overwrites with higher speeds', () => {
+  const mem = new Map();
+  const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) };
+  assert.equal(loadBestSpeed(storage, 'Verde'), null);
+  assert.equal(saveBestSpeed(storage, 'Verde', 90), true);
+  assert.equal(saveBestSpeed(storage, 'Verde', 80), false);
+  assert.equal(loadBestSpeed(storage, 'Verde'), 90);
+  assert.equal(saveBestSpeed(storage, 'Verde', 110), true);
+  assert.equal(loadBestSpeed(storage, 'Verde'), 110);
 });
 
 test('loadBest treats corrupted stored values as absent', () => {

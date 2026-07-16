@@ -51,3 +51,19 @@ export function saveBest(storage, trackName, time) {
   }
   return false;
 }
+
+export function loadBestSpeed(storage, trackName) {
+  const v = storage.getItem(`ski-maxspeed-${trackName}`);
+  if (v == null) return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function saveBestSpeed(storage, trackName, kmh) {
+  const best = loadBestSpeed(storage, trackName);
+  if (best === null || kmh > best) {
+    storage.setItem(`ski-maxspeed-${trackName}`, String(kmh));
+    return true;
+  }
+  return false;
+}
