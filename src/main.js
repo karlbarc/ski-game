@@ -63,6 +63,7 @@ function loadTrack(data) {
   worldGroup.add(makeRamps(track));
   worldGroup.add(makeGate(track, START_S, 0xd04040));
   worldGroup.add(makeGate(track, FINISH_S, 0x3050c0));
+  worldGroup.add(makeCrowd(track, FINISH_S));
   const center = track.toWorld(track.length / 2, 0, 0);
   worldGroup.add(makeSky(center), makeMountains(center), makeClouds(center));
   scene.add(worldGroup);
@@ -77,6 +78,7 @@ let finishShown = false;
 let paused = false;
 let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
 let runMaxSpeed = 0; // velocidad máxima de la bajada actual (m/s)
+let crowd = [];      // público animado junto a la meta (lo puebla makeCrowd)
 
 const hud = createHud();
 const controls = createControls();
@@ -186,6 +188,7 @@ function autopilotSteer() {
 
 function finish() {
   finishShown = true;
+  snow.cheer();
   const time = race.elapsed;
   const maxKmh = Math.round(runMaxSpeed * 3.6);
   const recordEligible = TIMESCALE === 1 && !AUTOPILOT;
@@ -243,6 +246,15 @@ function tick(now) {
     }
     if (player.airborne && !prev.airborne) hud.flash('¡Salto!', 800);
     if (race.status === 'finished' && !finishShown) finish();
+  }
+
+  // Animación del público (saltitos y brazos al aire)
+  const tSec = now / 1000;
+  for (const c of crowd) {
+    const wave = Math.sin(tSec * 6 + c.phase);
+    c.arms[0].rotation.z = -2.4 + Math.abs(wave) * 0.7;
+    c.arms[1].rotation.z = 2.4 - Math.abs(wave) * 0.7;
+    c.fig.position.y = c.baseY + Math.max(0, wave) * 0.18;
   }
 
   updateCamera();
@@ -649,6 +661,48 @@ function makeRamps(track) {
     mesh.position.copy(track.toWorld(centerS, o.lat, 0.05));
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), f.tan);
     group.add(mesh);
+  }
+  return group;
+}
+
+// Público junto a la meta: figuras low-poly que saltan y agitan los brazos.
+function makeCrowd(track, finishS) {
+  crowd = [];
+  const group = new THREE.Group();
+  const rng = mulberry32(77);
+  const jackets = [0xe04848, 0x2f80d0, 0xf2b134, 0x7a4fd0, 0x2fae62, 0xe07a2f];
+  const bodyGeo = new THREE.CapsuleGeometry(0.28, 0.7, 4, 8);
+  const headGeo = new THREE.SphereGeometry(0.16, 8, 6);
+  const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.55, 6);
+  const skin = new THREE.MeshLambertMaterial({ color: 0xd9a06a });
+  for (let i = 0; i < 12; i++) {
+    const side = i % 2 === 0 ? 1 : -1;
+    const s = finishS - 18 + rng() * 22;
+    const lat = side * (track.width / 2 + 1.5 + rng() * 2.5);
+    const jacket = new THREE.MeshLambertMaterial({ color: jackets[i % jackets.length] });
+    const fig = new THREE.Group();
+    const body = new THREE.Mesh(bodyGeo, jacket);
+    body.position.y = 0.75;
+    const head = new THREE.Mesh(headGeo, skin);
+    head.position.y = 1.45;
+    fig.add(body, head);
+    const arms = [];
+    for (const armSide of [-1, 1]) {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(armSide * 0.33, 1.15, 0);
+      const arm = new THREE.Mesh(armGeo, jacket);
+      arm.position.y = 0.24; // pivota desde el hombro
+      shoulder.add(arm);
+      shoulder.rotation.z = armSide * 2.4; // brazos en alto
+      fig.add(shoulder);
+      arms.push(shoulder);
+    }
+    const w = track.toWorld(s, lat, 0);
+    fig.position.copy(w);
+    const facing = track.toWorld(s, 0, 0);
+    fig.lookAt(facing.x, w.y, facing.z); // mirando a la pista
+    group.add(fig);
+    crowd.push({ fig, arms, baseY: w.y, phase: rng() * Math.PI * 2 });
   }
   return group;
 }
