@@ -1,0 +1,74 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createPlayerState, stepPlayer, PARAMS } from '../src/player.js';
+import { buildTrack } from '../src/track.js';
+import { verde } from '../src/tracks/verde.js';
+
+const track = buildTrack(verde);
+
+function run(state, steer, seconds) {
+  const dt = 1 / 60;
+  for (let t = 0; t < seconds; t += dt) state = stepPlayer(state, steer, dt, track);
+  return state;
+}
+
+test('gravity accelerates the player down the slope', () => {
+  const st = run(createPlayerState(), 0, 3);
+  assert.ok(st.speed > 2, `speed=${st.speed}`);
+  assert.ok(st.s > 3, `s=${st.s}`);
+});
+
+test('steering changes heading and drifts laterally', () => {
+  let st = { ...createPlayerState(), speed: 10 };
+  st = run(st, 1, 0.5);
+  assert.ok(st.heading > 0.2, `heading=${st.heading}`);
+  assert.ok(st.lat > 0.1, `lat=${st.lat}`);
+});
+
+test('carving brakes compared to going straight', () => {
+  const straight = run({ ...createPlayerState(), speed: 10 }, 0, 1.2);
+  let carving = { ...createPlayerState(), speed: 10 };
+  carving = run(carving, 1, 0.6);
+  carving = run(carving, -1, 0.6);
+  assert.ok(carving.speed < straight.speed, `${carving.speed} vs ${straight.speed}`);
+});
+
+test('hitting a tree causes a fall: speed 0 and penalty timer', () => {
+  const tree = track.obstacles.find((o) => o.type === 'tree');
+  let st = { ...createPlayerState(), s: tree.s - 5, lat: tree.lat, speed: 12 };
+  st = run(st, 0, 1);
+  assert.equal(st.fallen, true);
+  assert.equal(st.speed, 0);
+  assert.ok(st.fallTimer > 0);
+});
+
+test('going off-piste causes a fall and re-centers inside the track', () => {
+  let st = { ...createPlayerState(), s: 100, lat: 0, speed: 12 };
+  st = run(st, 1, 3);
+  assert.equal(st.fallen, true);
+  assert.ok(Math.abs(st.lat) <= track.width / 2);
+});
+
+test('fall recovers after the penalty', () => {
+  let st = { ...createPlayerState(), s: 100, speed: 0, fallen: true, fallTimer: PARAMS.fallPenalty };
+  st = run(st, 0, PARAMS.fallPenalty + 0.1);
+  assert.equal(st.fallen, false);
+});
+
+test('ramps launch the player and steering is locked in the air', () => {
+  const jump = track.obstacles.find((o) => o.type === 'jump');
+  let st = { ...createPlayerState(), s: jump.s - 3, lat: jump.lat, speed: 14 };
+  st = run(st, 0, 0.5);
+  assert.equal(st.airborne, true);
+  const a = stepPlayer(st, 1, 1 / 60, track);
+  const b = stepPlayer(st, -1, 1 / 60, track);
+  assert.equal(a.heading, b.heading);
+});
+
+test('the player lands after a jump', () => {
+  const jump = track.obstacles.find((o) => o.type === 'jump');
+  let st = { ...createPlayerState(), s: jump.s - 3, lat: jump.lat, speed: 14 };
+  st = run(st, 0, 4);
+  assert.equal(st.airborne, false);
+  assert.equal(st.height, 0);
+});
