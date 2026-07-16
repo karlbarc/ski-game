@@ -19,6 +19,7 @@ export const verde = {
   ],
   obstacles: [
     { type: 'tree', t: 0.12, offset: 2.5, variant: 'tall' },
+    { type: 'jump', t: 0.15, offset: 0 },
     { type: 'tree', t: 0.18, offset: 3 },
     { type: 'rock', t: 0.22, offset: -2 },
     { type: 'tree', t: 0.26, offset: -4 },
@@ -28,7 +29,6 @@ export const verde = {
     { type: 'tree', t: 0.47, offset: -3 },
     { type: 'rock', t: 0.52, offset: -2.5 },
     { type: 'tree', t: 0.55, variant: 'tall', offset: 4 },
-    { type: 'jump', t: 0.6, offset: 0 },
     { type: 'tree', t: 0.66, offset: -3 },
     { type: 'jump', t: 0.71, offset: 0 },
     { type: 'tree', t: 0.72, offset: 4 },

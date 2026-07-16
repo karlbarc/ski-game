@@ -122,11 +122,21 @@ function resumeGame() {
   document.getElementById('pause-screen').classList.remove('visible');
 }
 
-// Autopilot para verificación e2e: feedforward de curvatura + corrección PD del lateral.
+// Autopilot para verificación e2e: feedforward de curvatura + corrección PD del
+// lateral, esquivando el obstáculo sólido más cercano por delante.
 function autopilotSteer() {
   const ahead = track.frameAt(player.s + 8);
   const steerFF = (ahead.curvature * player.speed) / PARAMS.turnRate;
-  const headingTarget = Math.max(-0.4, Math.min(0.4, -0.05 * player.lat));
+  let latTarget = 0;
+  for (const o of track.obstacles) {
+    if (o.type === 'jump') continue;
+    const ds = o.s - player.s;
+    if (ds > 0 && ds < 30 && Math.abs(player.lat - o.lat) < 3) {
+      latTarget = o.lat + (player.lat >= o.lat ? 3 : -3);
+      break;
+    }
+  }
+  const headingTarget = Math.max(-0.5, Math.min(0.5, 0.06 * (latTarget - player.lat)));
   return Math.max(-1, Math.min(1, steerFF + (headingTarget - player.heading) * 3));
 }
 
@@ -459,22 +469,44 @@ function makeTrees(track) {
   return group;
 }
 
-// Puntas de skis en primera persona, colgadas de la cámara; se cantean al girar.
+// Ski en una sola pieza: cuerpo recto y una curva suave hacia arriba solo en la
+// punta (segmentos cortos con ángulo progresivo, fusionados — sin quiebres).
+function makeSkiGeometry() {
+  const pts = [[0.35, 0], [-0.85, 0]]; // tramo recto (z, y)
+  const tipStart = -0.85;
+  const tipLen = 0.35;
+  const curveK = 2.2; // curvatura de la punta (y = k/2 · d²)
+  const steps = 6;
+  for (let i = 1; i <= steps; i++) {
+    const d = (i / steps) * tipLen;
+    pts.push([tipStart - d, (curveK / 2) * d * d]);
+  }
+  const parts = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [z0, y0] = pts[i];
+    const [z1, y1] = pts[i + 1];
+    const len = Math.hypot(z1 - z0, y1 - y0);
+    const seg = new THREE.BoxGeometry(0.11, 0.03, len + 0.015); // solape mínimo entre tramos
+    seg.rotateX(Math.atan2(y1 - y0, -(z1 - z0)));
+    seg.translate(0, (y0 + y1) / 2, (z0 + z1) / 2);
+    parts.push(seg);
+  }
+  // Remate redondeado en el extremo de la punta
+  const [zEnd, yEnd] = pts[pts.length - 1];
+  const cap = new THREE.SphereGeometry(0.055, 8, 6);
+  cap.scale(1, 0.35, 1.4);
+  cap.translate(0, yEnd, zEnd);
+  parts.push(cap);
+  return mergeGeometries(parts);
+}
+
+// Skis en primera persona, colgados de la cámara; se cantean al girar.
 function makeSkis() {
   const group = new THREE.Group();
   const mat = new THREE.MeshLambertMaterial({ color: 0xd23c3c });
-  // Punta redondeada: cápsula tumbada a lo largo de z y aplastada al grosor del ski.
-  const tipGeo = new THREE.CapsuleGeometry(0.055, 0.2, 4, 10);
-  tipGeo.rotateX(Math.PI / 2);
-  tipGeo.scale(1, 0.28, 1);
+  const geo = makeSkiGeometry();
   for (const x of [-0.16, 0.16]) {
-    const ski = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.03, 1.3), mat);
-    body.position.z = -0.45;
-    const tip = new THREE.Mesh(tipGeo, mat);
-    tip.position.set(0, 0.06, -1.18);
-    tip.rotation.x = 0.5; // punta levantada
-    ski.add(body, tip);
+    const ski = new THREE.Mesh(geo, mat);
     ski.position.x = x;
     group.add(ski);
   }
