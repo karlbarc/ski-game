@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { buildTrack, mulberry32 } from './track.js';
 import { verde } from './tracks/verde.js';
 import { createPlayerState, stepPlayer, PARAMS } from './player.js';
-import { createRace, updateRace, formatTime, loadBest, saveBest } from './race.js';
+import { createRace, updateRace, pauseRace, resumeRace, formatTime, loadBest, saveBest } from './race.js';
 import { createControls } from './controls.js';
 import { createHud } from './hud.js';
 
@@ -47,6 +47,7 @@ let player = createPlayerState();
 let race = createRace(START_S, FINISH_S);
 let started = false;
 let finishShown = false;
+let paused = false;
 let lastSteer = 0;
 
 const hud = createHud();
@@ -55,6 +56,21 @@ const controls = createControls();
 document.getElementById('btn-touch').addEventListener('click', () => startGame('touch'));
 document.getElementById('btn-gyro').addEventListener('click', () => startGame('gyro'));
 document.getElementById('btn-restart').addEventListener('click', restart);
+document.getElementById('btn-pause').addEventListener('click', pauseGame);
+document.getElementById('btn-resume').addEventListener('click', resumeGame);
+document.getElementById('btn-restart-pause').addEventListener('click', restart);
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || e.key.toLowerCase() === 'p') {
+    if (paused) resumeGame();
+    else pauseGame();
+  }
+});
+
+// Auto-pausa al perder el foco (cambio de app/pestaña): el crono no debe correr solo.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseGame();
+});
 
 function startGame(mode) {
   controls.setMode(mode).then((ok) => {
@@ -68,7 +84,24 @@ function restart() {
   player = createPlayerState();
   race = createRace(START_S, FINISH_S);
   finishShown = false;
+  paused = false;
+  lastSteer = 0;
   hud.hideFinish();
+  document.getElementById('pause-screen').classList.remove('visible');
+}
+
+function pauseGame() {
+  if (!started || paused || race.status === 'finished') return;
+  paused = true;
+  race = pauseRace(race, performance.now());
+  document.getElementById('pause-screen').classList.add('visible');
+}
+
+function resumeGame() {
+  if (!paused) return;
+  paused = false;
+  race = resumeRace(race, performance.now());
+  document.getElementById('pause-screen').classList.remove('visible');
 }
 
 // Autopilot para verificación e2e: feedforward de curvatura + corrección PD del lateral.
@@ -110,7 +143,7 @@ function tick(now) {
   const dt = Math.min((now - last) / 1000, 0.05) * TIMESCALE;
   last = now;
 
-  if (started && race.status !== 'finished') {
+  if (started && !paused && race.status !== 'finished') {
     lastSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
     const prev = player;
     player = stepPlayer(player, lastSteer, dt, track);
@@ -133,7 +166,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-window.__game = { state: () => ({ player, race }), trackLength: track.length };
+window.__game = { state: () => ({ player, race, paused }), trackLength: track.length };
 
 // ---------- construcción de la escena ----------
 

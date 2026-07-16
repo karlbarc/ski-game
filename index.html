@@ -13,14 +13,16 @@
   .overlay h1 { font-size: 2.2rem; }
   .overlay button { font-size: 1.3rem; padding: 14px 36px; border: none; border-radius: 10px; background: #2f80d0; color: #fff; }
   .overlay button:active { background: #1f5f9f; }
-  #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); font-size: 1.4rem; font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none; }
+  #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); font-size: 1.4rem; font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none; }
+  #btn-pause { pointer-events: auto; background: rgba(10,30,50,.45); border: none; color: #fff; font-size: 1.2rem; border-radius: 8px; padding: 4px 16px; text-shadow: none; }
+  #btn-pause:active { background: rgba(10,30,50,.7); }
   #message { position: fixed; top: 20%; width: 100%; text-align: center; color: #ffdd57; font-size: 1.6rem; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,.7); opacity: 0; transition: opacity .3s; z-index: 5; pointer-events: none; }
   #message.visible { opacity: 1; }
   #finish-record { color: #ffdd57; font-weight: 700; }
 </style>
 </head>
 <body>
-<div id="hud"><span id="timer">00:00.00</span><span id="speed">0 km/h</span></div>
+<div id="hud"><span id="timer">00:00.00</span><button id="btn-pause" aria-label="Pausa">⏸</button><span id="speed">0 km/h</span></div>
 <div id="message"></div>
 <div id="start-screen" class="overlay visible">
   <h1>⛷️ Pista Verde</h1>
@@ -34,6 +36,11 @@
   <p id="finish-best"></p>
   <p id="finish-record" style="display:none">¡Nuevo récord!</p>
   <button id="btn-restart">Reintentar</button>
+</div>
+<div id="pause-screen" class="overlay">
+  <h1>⏸ Pausa</h1>
+  <button id="btn-resume">Continuar</button>
+  <button id="btn-restart-pause">Volver a empezar</button>
 </div>
 <div id="error-screen" class="overlay"><h1>Tu navegador no soporta WebGL</h1></div>
 <script type="importmap">

@@ -15,6 +15,19 @@ export function updateRace(race, playerS, nowMs) {
   return r;
 }
 
+export function pauseRace(race, nowMs) {
+  if (race.status !== 'running' || race.pausedAt != null) return race;
+  return { ...race, pausedAt: nowMs };
+}
+
+export function resumeRace(race, nowMs) {
+  if (race.pausedAt == null) return race;
+  // Desplaza el inicio para que el tiempo en pausa no cuente.
+  const r = { ...race, startTime: race.startTime + (nowMs - race.pausedAt) };
+  delete r.pausedAt;
+  return r;
+}
+
 export function formatTime(sec) {
   const pad = (n) => String(n).padStart(2, '0');
   const m = Math.floor(sec / 60);

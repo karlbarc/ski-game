@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRace, updateRace, formatTime, loadBest, saveBest } from '../src/race.js';
+import { createRace, updateRace, pauseRace, resumeRace, formatTime, loadBest, saveBest } from '../src/race.js';
 
 test('race starts when crossing the start line and finishes at the finish line', () => {
   let r = createRace(15, 700);
@@ -29,6 +29,26 @@ test('saveBest only overwrites with better times', () => {
   assert.equal(loadBest(storage, 'Verde'), 70);
   assert.equal(saveBest(storage, 'Verde', 60), true);
   assert.equal(loadBest(storage, 'Verde'), 60);
+});
+
+test('paused time does not count toward elapsed', () => {
+  let r = createRace(15, 700);
+  r = updateRace(r, 16, 1000);   // cruza la salida, startTime = 1000
+  r = updateRace(r, 100, 6000);  // elapsed = 5
+  r = pauseRace(r, 6000);
+  r = resumeRace(r, 16000);      // 10 s en pausa
+  r = updateRace(r, 200, 21000);
+  assert.equal(r.elapsed, 10);   // 5 antes de la pausa + 5 después
+  assert.equal(r.status, 'running');
+});
+
+test('pause before the start line and resume without pause are no-ops', () => {
+  const ready = createRace(15, 700);
+  assert.deepEqual(pauseRace(ready, 500), ready);
+  assert.deepEqual(resumeRace(ready, 600), ready);
+  let r = updateRace(ready, 16, 1000);
+  const paused = pauseRace(r, 2000);
+  assert.deepEqual(pauseRace(paused, 3000), paused); // doble pausa no re-desplaza
 });
 
 test('loadBest treats corrupted stored values as absent', () => {
