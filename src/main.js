@@ -238,6 +238,7 @@ function tick(now) {
     race = updateRace(race, player.s, now);
     if (race.status === 'running') runMaxSpeed = Math.max(runMaxSpeed, player.speed);
     if (player.fallen && !prev.fallen) {
+      snow.ouch();
       if (AUTOPILOT) {
         player = recoverPlayer(player); // los runs de verificación se levantan solos
       } else {

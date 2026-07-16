@@ -57,6 +57,44 @@ export function createSnowSound() {
       gain.gain.setTargetAtTime(target, ctx.currentTime, 0.08);
       filter.frequency.setTargetAtTime(700 + 2500 * glide, ctx.currentTime, 0.15);
     },
+    // Quejido de dolor al caer: golpe sordo + gemido descendente ("¡aghh!").
+    ouch() {
+      if (!ctx) return;
+      const t0 = ctx.currentTime;
+      // golpe contra la nieve
+      const len = Math.floor(ctx.sampleRate * 0.09);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const thud = ctx.createBufferSource();
+      thud.buffer = buf;
+      const thudFilter = ctx.createBiquadFilter();
+      thudFilter.type = 'lowpass';
+      thudFilter.frequency.value = 250;
+      const thudGain = ctx.createGain();
+      thudGain.gain.value = 0.9;
+      thud.connect(thudFilter);
+      thudFilter.connect(thudGain);
+      thudGain.connect(ctx.destination);
+      thud.start(t0);
+      // gemido: tono que cae, con voz "amortiguada" por un paso bajo
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(240, t0 + 0.04);
+      osc.frequency.exponentialRampToValueAtTime(85, t0 + 0.5);
+      const voice = ctx.createBiquadFilter();
+      voice.type = 'lowpass';
+      voice.frequency.value = 650;
+      const og = ctx.createGain();
+      og.gain.setValueAtTime(0, t0 + 0.04);
+      og.gain.linearRampToValueAtTime(0.3, t0 + 0.1);
+      og.gain.setTargetAtTime(0, t0 + 0.32, 0.12);
+      osc.connect(voice);
+      voice.connect(og);
+      og.connect(ctx.destination);
+      osc.start(t0 + 0.04);
+      osc.stop(t0 + 0.7);
+    },
     // Ovación al cruzar la meta: aplausos (ráfagas de ruido) + "woohoos" (glides).
     cheer() {
       if (!ctx) return;
