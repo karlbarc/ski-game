@@ -78,6 +78,7 @@ let finishShown = false;
 let paused = false;
 let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
 let runMaxSpeed = 0; // velocidad máxima de la bajada actual (m/s)
+let crashSpeed = 0;  // velocidad en el momento de la caída (se muestra congelada)
 let crowd = [];      // público animado junto a la meta (lo puebla makeCrowd)
 
 const hud = createHud();
@@ -139,6 +140,7 @@ function restart() {
   paused = false;
   steerSmooth = 0;
   runMaxSpeed = 0;
+  crashSpeed = 0;
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
   document.getElementById('fall-screen').classList.remove('visible');
@@ -147,6 +149,8 @@ function restart() {
 function standUp() {
   if (!player.fallen) return;
   player = recoverPlayer(player);
+  race = resumeRace(race, performance.now()); // el crono vuelve a correr
+  crashSpeed = 0;
   document.getElementById('fall-screen').classList.remove('visible');
 }
 
@@ -161,6 +165,8 @@ function resumeGame() {
   if (!paused) return;
   paused = false;
   race = resumeRace(race, performance.now());
+  // Si se pausó estando caído, el crono debe seguir detenido hasta Continuar.
+  if (player.fallen) race = pauseRace(race, performance.now());
   document.getElementById('pause-screen').classList.remove('visible');
 }
 
@@ -235,13 +241,15 @@ function tick(now) {
     steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * 3);
     const prev = player;
     player = stepPlayer(player, steerSmooth, dt, track);
-    race = updateRace(race, player.s, now);
+    if (!player.fallen) race = updateRace(race, player.s, now); // caído: crono congelado
     if (race.status === 'running') runMaxSpeed = Math.max(runMaxSpeed, player.speed);
     if (player.fallen && !prev.fallen) {
       snow.ouch();
       if (AUTOPILOT) {
         player = recoverPlayer(player); // los runs de verificación se levantan solos
       } else {
+        crashSpeed = prev.speed; // el marcador congela la velocidad del impacto
+        race = pauseRace(race, now); // el crono se detiene mientras estás caído
         document.getElementById('fall-screen').classList.add('visible');
       }
     }
@@ -263,7 +271,7 @@ function tick(now) {
     && !player.airborne && !player.fallen;
   snow.update(gliding ? player.speed : 0, steerSmooth, gliding);
   hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(race.elapsed));
-  hud.setSpeed(player.speed * 3.6);
+  hud.setSpeed((player.fallen ? crashSpeed : player.speed) * 3.6);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(tick);
