@@ -153,7 +153,7 @@ function tick(now) {
 
   if (started && !paused && race.status !== 'finished') {
     const rawSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
-    steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * 3.5);
+    steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * 3);
     const prev = player;
     player = stepPlayer(player, steerSmooth, dt, track);
     race = updateRace(race, player.s, now);
