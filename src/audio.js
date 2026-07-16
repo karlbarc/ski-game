@@ -5,6 +5,16 @@ export function createSnowSound() {
   let ctx = null;
   let gain = null;
   let filter = null;
+  let ouchBuffers = []; // quejidos reales (assets/ouch*.wav, CC0)
+
+  function loadOuches() {
+    const files = ['assets/ouch1.wav', 'assets/ouch2.wav', 'assets/ouch3.wav'];
+    Promise.all(files.map(async (f) => {
+      const res = await fetch(f);
+      return ctx.decodeAudioData(await res.arrayBuffer());
+    })).then((buffers) => { ouchBuffers = buffers; })
+      .catch(() => { /* sin assets: queda el quejido sintetizado */ });
+  }
 
   function ensure() {
     if (ctx) return;
@@ -43,6 +53,7 @@ export function createSnowSound() {
       } catch { /* API no disponible: seguimos igual */ }
       ensure();
       resume();
+      if (ctx && !ouchBuffers.length) loadOuches();
       // iOS suspende el contexto al cambiar de app; lo reactivamos al volver o al tocar.
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) resume();
@@ -57,10 +68,21 @@ export function createSnowSound() {
       gain.gain.setTargetAtTime(target, ctx.currentTime, 0.08);
       filter.frequency.setTargetAtTime(700 + 2500 * glide, ctx.currentTime, 0.15);
     },
-    // Quejido de dolor al caer: golpe sordo + gemido descendente ("¡aghh!").
+    // Quejido de dolor al caer: WAV real si está cargado; si no, sintetizado.
     ouch() {
       if (!ctx) return;
       const t0 = ctx.currentTime;
+      if (ouchBuffers.length) {
+        const src = ctx.createBufferSource();
+        src.buffer = ouchBuffers[Math.floor(Math.random() * ouchBuffers.length)];
+        src.playbackRate.value = 0.95 + Math.random() * 0.1; // pequeña variación
+        const g = ctx.createGain();
+        g.gain.value = 0.8;
+        src.connect(g);
+        g.connect(ctx.destination);
+        src.start(t0);
+        return;
+      }
       // golpe contra la nieve
       const len = Math.floor(ctx.sampleRate * 0.09);
       const buf = ctx.createBuffer(1, len, ctx.sampleRate);
