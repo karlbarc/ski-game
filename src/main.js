@@ -549,17 +549,68 @@ function makeRamps(track) {
   return group;
 }
 
-function makeGate(track, s, color) {
-  const g = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color });
-  for (const sideSign of [-1, 1]) {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4, 8), mat);
-    pole.position.copy(track.toWorld(s, sideSign * (track.width / 2), 2));
-    g.add(pole);
+// Textura de veta de madera: base marrón con estrías verticales.
+function makeWoodTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#8a5a2b';
+  g.fillRect(0, 0, size, size);
+  const rng = mulberry32(55);
+  for (let i = 0; i < 70; i++) {
+    const x = rng() * size;
+    const w = 1 + rng() * 3;
+    const dark = rng() < 0.6;
+    g.fillStyle = dark
+      ? `rgba(70, 42, 16, ${0.12 + rng() * 0.18})`
+      : `rgba(200, 150, 90, ${0.08 + rng() * 0.12})`;
+    g.fillRect(x, 0, w, size);
   }
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(track.width, 0.5, 0.3), mat);
-  bar.position.copy(track.toWorld(s, 0, 4));
-  bar.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), track.frameAt(s).side);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Arco de madera: pilares, travesaño apoyado con solape, tirantes y banderines.
+function makeGate(track, s, accentColor) {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshLambertMaterial({ color: 0xa87840, map: makeWoodTexture() });
+  const hw = track.width / 2;
+  const postH = 4.6;
+  const barY = 4.35; // apoyado sobre los pilares (solapa 0.25 con sus extremos)
+
+  for (const sideSign of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, postH, 10), wood);
+    post.position.set(sideSign * hw, postH / 2, 0);
+    g.add(post);
+    // Tirante diagonal pilar-travesaño
+    const brace = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.7, 8), wood);
+    brace.position.set(sideSign * (hw - 0.65), barY - 0.75, 0);
+    brace.rotation.z = sideSign * 0.75;
+    g.add(brace);
+  }
+
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, track.width + 1.4, 10), wood);
+  bar.rotation.z = Math.PI / 2; // tumbado a lo ancho de la pista
+  bar.position.set(0, barY, 0);
   g.add(bar);
+
+  // Banderines colgando del travesaño, alternando color y blanco
+  const flagMats = [
+    new THREE.MeshLambertMaterial({ color: accentColor, side: THREE.DoubleSide }),
+    new THREE.MeshLambertMaterial({ color: 0xf5f5f5, side: THREE.DoubleSide }),
+  ];
+  for (let i = 0; i < 9; i++) {
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.65), flagMats[i % 2]);
+    flag.position.set(-track.width / 2 + 1.6 + i * ((track.width - 3.2) / 8), barY - 0.55, 0);
+    g.add(flag);
+  }
+
+  // Orienta el arco local (x = ancho de pista) y lo planta en el terreno.
+  g.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), track.frameAt(s).side);
+  g.position.copy(track.toWorld(s, 0, 0));
   return g;
 }
