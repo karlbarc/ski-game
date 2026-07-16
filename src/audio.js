@@ -30,19 +30,32 @@ export function createSnowSound() {
     src.start();
   }
 
+  function resume() {
+    if (ctx && ctx.state !== 'running') ctx.resume();
+  }
+
   return {
     // Llamar dentro de un gesto del usuario (click/touch) para poder sonar en iOS.
     start() {
+      // En iOS, que el audio suene aunque el interruptor de silencio esté activado.
+      try {
+        if (navigator.audioSession) navigator.audioSession.type = 'playback';
+      } catch { /* API no disponible: seguimos igual */ }
       ensure();
-      if (ctx && ctx.state === 'suspended') ctx.resume();
+      resume();
+      // iOS suspende el contexto al cambiar de app; lo reactivamos al volver o al tocar.
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) resume();
+      });
+      window.addEventListener('touchend', resume);
     },
     // speed en m/s; steer en [-1,1]; grounded=false silencia (aire/caída/pausa).
     update(speed, steer, grounded) {
       if (!gain) return;
       const glide = Math.min(1, speed / 25);
-      const target = grounded ? glide * (0.1 + 0.15 * Math.abs(steer)) : 0;
+      const target = grounded ? glide * (0.22 + 0.25 * Math.abs(steer)) : 0;
       gain.gain.setTargetAtTime(target, ctx.currentTime, 0.08);
-      filter.frequency.setTargetAtTime(400 + 2600 * glide, ctx.currentTime, 0.15);
+      filter.frequency.setTargetAtTime(700 + 2500 * glide, ctx.currentTime, 0.15);
     },
   };
 }
