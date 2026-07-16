@@ -1,8 +1,230 @@
 import * as THREE from 'three';
+import { buildTrack, mulberry32 } from './track.js';
+import { verde } from './tracks/verde.js';
+import { createPlayerState, stepPlayer, PARAMS } from './player.js';
+import { createRace, updateRace, formatTime, loadBest, saveBest } from './race.js';
+import { createControls } from './controls.js';
+import { createHud } from './hud.js';
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const query = new URLSearchParams(location.search);
+const AUTOPILOT = query.get('autopilot') === '1';
+const TIMESCALE = parseFloat(query.get('timescale') || '1');
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (e) {
+  document.getElementById('error-screen').classList.add('visible');
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
-renderer.setClearColor(0xbfdcf5);
-renderer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
-console.log('ski-game scaffold OK');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfdcf5);
+scene.fog = new THREE.Fog(0xbfdcf5, 60, 260);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(80, 120, -40);
+scene.add(sun);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 500);
+
+const track = buildTrack(verde);
+const START_S = 15;
+const FINISH_S = track.length - 15;
+
+scene.add(makeRibbon(track, -track.width / 2, track.width / 2, 0xf4f9ff, 0));
+scene.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, 0xdde7ee, 0.15));
+scene.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, 0xdde7ee, 0.15));
+scene.add(makeTrees(track));
+scene.add(makeRamps(track));
+scene.add(makeGate(track, START_S, 0xd04040));
+scene.add(makeGate(track, FINISH_S, 0x3050c0));
+
+let player = createPlayerState();
+let race = createRace(START_S, FINISH_S);
+let started = false;
+let finishShown = false;
+let lastSteer = 0;
+
+const hud = createHud();
+const controls = createControls();
+
+document.getElementById('btn-touch').addEventListener('click', () => startGame('touch'));
+document.getElementById('btn-gyro').addEventListener('click', () => startGame('gyro'));
+document.getElementById('btn-restart').addEventListener('click', restart);
+
+function startGame(mode) {
+  controls.setMode(mode).then((ok) => {
+    if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
+  });
+  hud.hideStart();
+  started = true;
+}
+
+function restart() {
+  player = createPlayerState();
+  race = createRace(START_S, FINISH_S);
+  finishShown = false;
+  hud.hideFinish();
+}
+
+// Autopilot para verificación e2e: feedforward de curvatura + corrección PD del lateral.
+function autopilotSteer() {
+  const ahead = track.frameAt(player.s + 8);
+  const steerFF = (ahead.curvature * player.speed) / PARAMS.turnRate;
+  const headingTarget = Math.max(-0.4, Math.min(0.4, -0.05 * player.lat));
+  return Math.max(-1, Math.min(1, steerFF + (headingTarget - player.heading) * 3));
+}
+
+function finish() {
+  finishShown = true;
+  const time = race.elapsed;
+  const isRecord = saveBest(localStorage, track.data.name, time);
+  const best = loadBest(localStorage, track.data.name);
+  hud.showFinish(`Tiempo: ${formatTime(time)}`, `Mejor: ${formatTime(best)}`, isRecord);
+}
+
+function updateCamera() {
+  const f = track.frameAt(player.s);
+  const eye = player.fallen ? 0.6 : 1.7;
+  const pos = track.toWorld(player.s, player.lat, player.height + eye);
+  camera.position.copy(pos);
+  const dir = f.tan.clone().multiplyScalar(Math.cos(player.heading))
+    .addScaledVector(f.side, Math.sin(player.heading));
+  camera.lookAt(pos.clone().add(dir));
+  camera.rotateZ(player.fallen ? 0.5 : lastSteer * 0.12);
+  const fov = Math.min(95, 70 + player.speed * 0.9);
+  if (Math.abs(fov - camera.fov) > 0.1) {
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
+  }
+}
+
+let last = performance.now();
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min((now - last) / 1000, 0.05) * TIMESCALE;
+  last = now;
+
+  if (started && race.status !== 'finished') {
+    lastSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
+    const prev = player;
+    player = stepPlayer(player, lastSteer, dt, track);
+    race = updateRace(race, player.s, now);
+    if (player.fallen && !prev.fallen) hud.flash('¡Te has caído!');
+    if (player.airborne && !prev.airborne) hud.flash('¡Salto!', 800);
+    if (race.status === 'finished' && !finishShown) finish();
+  }
+
+  updateCamera();
+  hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(race.elapsed));
+  hud.setSpeed(player.speed * 3.6);
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(tick);
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+window.__game = { state: () => ({ player, race }), trackLength: track.length };
+
+// ---------- construcción de la escena ----------
+
+function makeRibbon(track, latA, latB, color, drop) {
+  const rows = 400;
+  const pos = [];
+  const idx = [];
+  for (let i = 0; i <= rows; i++) {
+    const s = (i / rows) * track.length;
+    const a = track.toWorld(s, latA, -drop);
+    const b = track.toWorld(s, latB, -drop);
+    pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+  for (let i = 0; i < rows; i++) {
+    const k = i * 2;
+    idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
+}
+
+function makeTrees(track) {
+  const group = new THREE.Group();
+  const rng = mulberry32(42);
+  const positions = [];
+  for (let s = 5; s < track.length - 5; s += 5) {
+    for (const sideSign of [-1, 1]) {
+      if (rng() < 0.75) {
+        positions.push({
+          s,
+          lat: sideSign * (track.width / 2 + 2 + rng() * 12),
+          scale: 0.8 + rng() * 0.7,
+        });
+      }
+    }
+  }
+  for (const o of track.obstacles) {
+    if (o.type === 'tree') positions.push({ s: o.s, lat: o.lat, scale: 1 });
+  }
+  const foliage = new THREE.InstancedMesh(
+    new THREE.ConeGeometry(1.6, 4.5, 8),
+    new THREE.MeshLambertMaterial({ color: 0x1d5c33 }),
+    positions.length,
+  );
+  const trunk = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.25, 0.3, 1.6, 6),
+    new THREE.MeshLambertMaterial({ color: 0x5a3d24 }),
+    positions.length,
+  );
+  const m = new THREE.Matrix4();
+  positions.forEach((p, i) => {
+    const w = track.toWorld(p.s, p.lat, 0);
+    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + 2.8 * p.scale, w.z);
+    foliage.setMatrixAt(i, m);
+    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + 0.8 * p.scale, w.z);
+    trunk.setMatrixAt(i, m);
+  });
+  group.add(foliage, trunk);
+  return group;
+}
+
+function makeRamps(track) {
+  const group = new THREE.Group();
+  for (const o of track.obstacles) {
+    if (o.type !== 'jump') continue;
+    const f = track.frameAt(o.s);
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(7, 1, 6),
+      new THREE.MeshLambertMaterial({ color: 0xe8f2fb }),
+    );
+    mesh.position.copy(track.toWorld(o.s, o.lat, 0.2));
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), f.tan);
+    mesh.rotateX(-0.18);
+    group.add(mesh);
+  }
+  return group;
+}
+
+function makeGate(track, s, color) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color });
+  for (const sideSign of [-1, 1]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4, 8), mat);
+    pole.position.copy(track.toWorld(s, sideSign * (track.width / 2), 2));
+    g.add(pole);
+  }
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(track.width, 0.5, 0.3), mat);
+  bar.position.copy(track.toWorld(s, 0, 4));
+  bar.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), track.frameAt(s).side);
+  g.add(bar);
+  return g;
+}
