@@ -5,6 +5,7 @@ import { createPlayerState, stepPlayer, PARAMS } from './player.js';
 import { createRace, updateRace, pauseRace, resumeRace, formatTime, loadBest, saveBest } from './race.js';
 import { createControls } from './controls.js';
 import { createHud } from './hud.js';
+import { createSnowSound } from './audio.js';
 
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
@@ -56,6 +57,7 @@ let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, esti
 
 const hud = createHud();
 const controls = createControls();
+const snow = createSnowSound();
 
 document.getElementById('btn-touch').addEventListener('click', () => startGame('touch'));
 document.getElementById('btn-gyro').addEventListener('click', () => startGame('gyro'));
@@ -77,6 +79,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function startGame(mode) {
+  snow.start(); // dentro del gesto del usuario, requisito de iOS
   controls.setMode(mode).then((ok) => {
     if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
     hud.hideStart();
@@ -163,6 +166,9 @@ function tick(now) {
   }
 
   updateCamera();
+  const gliding = started && !paused && race.status !== 'finished'
+    && !player.airborne && !player.fallen;
+  snow.update(gliding ? player.speed : 0, steerSmooth, gliding);
   hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(race.elapsed));
   hud.setSpeed(player.speed * 3.6);
   renderer.render(scene, camera);
