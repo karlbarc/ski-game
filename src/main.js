@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildTrack, mulberry32 } from './track.js';
 import { verde } from './tracks/verde.js';
 import { azul } from './tracks/azul.js';
+import { negra } from './tracks/negra.js';
 import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
@@ -39,7 +40,7 @@ const skis = makeSkis();
 camera.add(skis);
 scene.add(camera); // necesario para que se rendericen los hijos de la cámara
 
-const TRACKS = { verde, azul };
+const TRACKS = { verde, azul, negra };
 const snowTexture = makeSnowTexture();
 
 let track = null;

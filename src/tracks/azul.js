@@ -2,7 +2,7 @@
 // obstáculos densos (algunos cerca del eje que obligan a zigzaguear) y 3 saltos.
 export const azul = {
   name: 'Azul',
-  width: 11,
+  width: 13,
   controlPoints: [
     [0, 0, 0],
     [0, -8, -55],
