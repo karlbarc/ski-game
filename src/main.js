@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildTrack, mulberry32 } from './track.js';
 import { verde } from './tracks/verde.js';
-import { createPlayerState, stepPlayer, PARAMS } from './player.js';
+import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
@@ -75,6 +75,8 @@ document.getElementById('btn-restart').addEventListener('click', restart);
 document.getElementById('btn-pause').addEventListener('click', pauseGame);
 document.getElementById('btn-resume').addEventListener('click', resumeGame);
 document.getElementById('btn-restart-pause').addEventListener('click', restart);
+document.getElementById('btn-continue').addEventListener('click', standUp);
+document.getElementById('btn-restart-fall').addEventListener('click', restart);
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' || e.key.toLowerCase() === 'p') {
@@ -106,6 +108,13 @@ function restart() {
   runMaxSpeed = 0;
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
+  document.getElementById('fall-screen').classList.remove('visible');
+}
+
+function standUp() {
+  if (!player.fallen) return;
+  player = recoverPlayer(player);
+  document.getElementById('fall-screen').classList.remove('visible');
 }
 
 function pauseGame() {
@@ -190,7 +199,13 @@ function tick(now) {
     player = stepPlayer(player, steerSmooth, dt, track);
     race = updateRace(race, player.s, now);
     if (race.status === 'running') runMaxSpeed = Math.max(runMaxSpeed, player.speed);
-    if (player.fallen && !prev.fallen) hud.flash('¡Te has caído!');
+    if (player.fallen && !prev.fallen) {
+      if (AUTOPILOT) {
+        player = recoverPlayer(player); // los runs de verificación se levantan solos
+      } else {
+        document.getElementById('fall-screen').classList.add('visible');
+      }
+    }
     if (player.airborne && !prev.airborne) hud.flash('¡Salto!', 800);
     if (race.status === 'finished' && !finishShown) finish();
   }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPlayerState, stepPlayer, PARAMS } from '../src/player.js';
+import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from '../src/player.js';
 import { buildTrack } from '../src/track.js';
 import { verde } from '../src/tracks/verde.js';
 
@@ -51,13 +51,14 @@ test('carving brakes compared to going straight', () => {
   assert.ok(carving.speed < straight.speed, `${carving.speed} vs ${straight.speed}`);
 });
 
-test('hitting a tree causes a fall: speed 0 and penalty timer', () => {
+test('hitting a tree causes a fall that persists until recovery', () => {
   const tree = track.obstacles.find((o) => o.type === 'tree');
   let st = { ...createPlayerState(), s: tree.s - 5, lat: tree.lat, speed: 12 };
   st = run(st, 0, 1);
   assert.equal(st.fallen, true);
   assert.equal(st.speed, 0);
-  assert.ok(st.fallTimer > 0);
+  st = run(st, 0, 5); // sin levantarse explícitamente, sigue en el suelo
+  assert.equal(st.fallen, true);
 });
 
 test('hitting a rock causes a fall like a tree', () => {
@@ -74,7 +75,8 @@ test('after an obstacle fall the player recovers clear of it (no repeat collisio
   let st = { ...createPlayerState(), s: rock.s - 5, lat: rock.lat, speed: 12 };
   st = run(st, 0, 1); // choca y cae
   assert.equal(st.fallen, true);
-  st = run(st, 0, PARAMS.fallPenalty + 2); // se levanta y sigue recto sin girar
+  st = recoverPlayer(st);
+  st = run(st, 0, 2); // se levanta y sigue recto sin girar
   assert.equal(st.fallen, false, 'player fell again on the same obstacle');
   assert.ok(st.s > rock.s + 2, `player should be past the obstacle, s=${st.s} vs rock ${rock.s}`);
 });
@@ -86,10 +88,12 @@ test('going off-piste causes a fall and re-centers inside the track', () => {
   assert.ok(Math.abs(st.lat) <= track.width / 2);
 });
 
-test('fall recovers after the penalty', () => {
-  let st = { ...createPlayerState(), s: 100, speed: 0, fallen: true, fallTimer: PARAMS.fallPenalty };
-  st = run(st, 0, PARAMS.fallPenalty + 0.1);
+test('recoverPlayer stands the player up with control back', () => {
+  let st = { ...createPlayerState(), s: 100, speed: 0, fallen: true };
+  st = recoverPlayer(st);
   assert.equal(st.fallen, false);
+  st = run(st, 0, 1);
+  assert.ok(st.speed > 0, 'player should slide again after recovering');
 });
 
 test('the ramp raises the player before takeoff instead of clipping through', () => {
@@ -157,7 +161,7 @@ test('holding a full turn never soft-locks the player at zero speed', () => {
   const dt = 1 / 60;
   for (let t = 0; t < 6; t += dt) {
     st = stepPlayer(st, 1, dt, track);
-    if (st.fallen) { st = { ...st, fallen: false, fallTimer: 0 }; } // ignore off-piste falls; we only care about forward motion
+    if (st.fallen) { st = recoverPlayer(st); } // ignore off-piste falls; we only care about forward motion
   }
   assert.ok(st.speed > 0.3, `speed=${st.speed} — player stalled while holding full lock`);
 });

@@ -10,7 +10,6 @@ export const PARAMS = {
   rampLength: 6,       // la rampa sube desde o.s - rampLength hasta el labio en o.s
   rampHeight: 1.3,
   rampHalfWidth: 3.5,
-  fallPenalty: 3.0,    // segundos parado tras caerse
   maxSpeed: 45,
   crawlSpeed: 1.5,      // por debajo de esto, el freno de carving se desactiva (evita soft-lock)
   tuckAccel: 2.4,       // bono de aceleración al ir en línea (m/s², se desvanece al girar)
@@ -21,13 +20,18 @@ export function createPlayerState() {
   return {
     s: 0, lat: 0, heading: 0, speed: 0,
     height: 0, vy: 0, airborne: false,
-    fallen: false, fallTimer: 0,
+    fallen: false,
   };
+}
+
+// El jugador se levanta cuando lo decide (botón Continuar): la penalización
+// por caída es el tiempo que tarde en pulsarlo, con el crono corriendo.
+export function recoverPlayer(state) {
+  return { ...state, fallen: false };
 }
 
 function fall(st, halfWidth, params, obstacle) {
   st.fallen = true;
-  st.fallTimer = params.fallPenalty;
   st.speed = 0;
   st.heading = 0;
   st.airborne = false;
@@ -47,14 +51,7 @@ function fall(st, halfWidth, params, obstacle) {
 
 export function stepPlayer(state, steer, dt, track, params = PARAMS) {
   const st = { ...state };
-  if (st.fallen) {
-    st.fallTimer -= dt;
-    if (st.fallTimer <= 0) {
-      st.fallen = false;
-      st.fallTimer = 0;
-    }
-    return st;
-  }
+  if (st.fallen) return st; // en el suelo hasta que recoverPlayer lo levante
 
   const frame = track.frameAt(st.s);
 
