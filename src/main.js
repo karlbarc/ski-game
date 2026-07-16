@@ -39,9 +39,10 @@ const track = buildTrack(verde);
 const START_S = 15;
 const FINISH_S = track.length - 15;
 
-scene.add(makeRibbon(track, -track.width / 2, track.width / 2, 0xf4f9ff, 0));
-scene.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, 0xdde7ee, 0.15));
-scene.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, 0xdde7ee, 0.15));
+const snowTexture = makeSnowTexture();
+scene.add(makeRibbon(track, -track.width / 2, track.width / 2, 0xf4f9ff, 0, snowTexture));
+scene.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, 0xdde7ee, 0.15, snowTexture));
+scene.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, 0xdde7ee, 0.15, snowTexture));
 scene.add(makeTrees(track));
 scene.add(makeRocks(track));
 scene.add(makeRamps(track));
@@ -185,15 +186,58 @@ window.__game = { state: () => ({ player, race, paused }), trackLength: track.le
 
 // ---------- construcción de la escena ----------
 
-function makeRibbon(track, latA, latB, color, drop) {
+// Textura de nieve procedural: gránulos y manchas suaves sobre blanco.
+function makeSnowTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, size, size);
+  const rng = mulberry32(99);
+  // Dibuja en las 9 posiciones envueltas para que la textura repita sin costuras.
+  const wrapped = (draw) => {
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) draw(ox, oy);
+  };
+  for (let i = 0; i < 60; i++) { // manchas anchas y tenues (ondulaciones)
+    const x = rng() * size;
+    const y = rng() * size;
+    const r = 20 + rng() * 40;
+    wrapped((ox, oy) => {
+      const grad = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+      grad.addColorStop(0, 'rgba(185, 200, 222, 0.07)');
+      grad.addColorStop(1, 'rgba(185, 200, 222, 0)');
+      g.fillStyle = grad;
+      g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+    });
+  }
+  for (let i = 0; i < 1600; i++) { // gránulos finos
+    const a = 0.05 + rng() * 0.09;
+    const x = rng() * size;
+    const y = rng() * size;
+    const s = 0.6 + rng() * 1.5;
+    g.fillStyle = `rgba(140, 165, 200, ${a})`;
+    wrapped((ox, oy) => g.fillRect(x + ox, y + oy, s, s));
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeRibbon(track, latA, latB, color, drop, map) {
   const rows = 400;
+  const TEX_METERS = 4; // la textura se repite cada 4 m en ambos ejes
   const pos = [];
+  const uv = [];
   const idx = [];
   for (let i = 0; i <= rows; i++) {
     const s = (i / rows) * track.length;
     const a = track.toWorld(s, latA, -drop);
     const b = track.toWorld(s, latB, -drop);
     pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    uv.push(latA / TEX_METERS, s / TEX_METERS, latB / TEX_METERS, s / TEX_METERS);
   }
   for (let i = 0; i < rows; i++) {
     const k = i * 2;
@@ -201,9 +245,10 @@ function makeRibbon(track, latA, latB, color, drop) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
-  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
+  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, map, side: THREE.DoubleSide }));
 }
 
 function makeTrees(track) {
