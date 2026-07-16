@@ -6,7 +6,7 @@ export function createHud(doc = document) {
     setSpeed(kmh) {
       const pct = Math.min(100, (kmh / 120) * 100); // ~115 km/h es la punta real del juego
       el('speed-fill').style.width = `${pct}%`;
-      el('speed-num').textContent = `${Math.round(kmh)} km/h`;
+      el('speed-value').textContent = Math.round(kmh);
     },
     flash(text, ms = 1500) {
       const m = el('message');
