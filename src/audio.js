@@ -6,14 +6,20 @@ export function createSnowSound() {
   let gain = null;
   let filter = null;
   let ouchBuffers = []; // quejidos reales (assets/ouch*.wav, CC0)
+  let cheerBuffer = null; // ovación real (assets/cheer.wav, CC-BY Gregor Quendel)
 
-  function loadOuches() {
-    const files = ['assets/ouch1.wav', 'assets/ouch2.wav', 'assets/ouch3.wav'];
-    Promise.all(files.map(async (f) => {
-      const res = await fetch(f);
-      return ctx.decodeAudioData(await res.arrayBuffer());
-    })).then((buffers) => { ouchBuffers = buffers; })
+  async function loadBuffer(file) {
+    const res = await fetch(file);
+    return ctx.decodeAudioData(await res.arrayBuffer());
+  }
+
+  function loadAssets() {
+    Promise.all(['assets/ouch1.wav', 'assets/ouch2.wav', 'assets/ouch3.wav'].map(loadBuffer))
+      .then((buffers) => { ouchBuffers = buffers; })
       .catch(() => { /* sin assets: queda el quejido sintetizado */ });
+    loadBuffer('assets/cheer.wav')
+      .then((buffer) => { cheerBuffer = buffer; })
+      .catch(() => { /* sin asset: queda la ovación sintetizada */ });
   }
 
   function ensure() {
@@ -53,7 +59,7 @@ export function createSnowSound() {
       } catch { /* API no disponible: seguimos igual */ }
       ensure();
       resume();
-      if (ctx && !ouchBuffers.length) loadOuches();
+      if (ctx && !ouchBuffers.length) loadAssets();
       // iOS suspende el contexto al cambiar de app; lo reactivamos al volver o al tocar.
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) resume();
@@ -117,10 +123,20 @@ export function createSnowSound() {
       osc.start(t0 + 0.04);
       osc.stop(t0 + 0.7);
     },
-    // Ovación al cruzar la meta: aplausos (ráfagas de ruido) + "woohoos" (glides).
+    // Ovación al cruzar la meta: WAV real si está cargado; si no, sintetizada.
     cheer() {
       if (!ctx) return;
       const t0 = ctx.currentTime;
+      if (cheerBuffer) {
+        const src = ctx.createBufferSource();
+        src.buffer = cheerBuffer;
+        const g = ctx.createGain();
+        g.gain.value = 0.75;
+        src.connect(g);
+        g.connect(ctx.destination);
+        src.start(t0);
+        return;
+      }
       const dur = 3;
       const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
       const data = buf.getChannelData(0);
