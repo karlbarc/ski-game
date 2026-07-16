@@ -2,7 +2,7 @@ export function createHud(doc = document) {
   const el = (id) => doc.getElementById(id);
   let msgTimer = 0;
   return {
-    setTimer(text) { el('timer').textContent = text; },
+    setTimer(text) { el('timer-text').textContent = text; },
     setSpeed(kmh) {
       const pct = Math.min(100, (kmh / 120) * 100); // ~115 km/h es la punta real del juego
       el('speed-fill').style.width = `${pct}%`;
