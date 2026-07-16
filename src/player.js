@@ -2,9 +2,9 @@ export const PARAMS = {
   gravity: 9.8,
   friction: 0.25,      // rozamiento base de la nieve (m/s²)
   drag: 0.005,         // resistencia del aire (·v²)
-  carveBrake: 2.5,     // frenada extra por carving (·|sin(heading)|)
+  carveBrake: 0.35,    // frenada extra por carving (·|sin(heading)|)
   turnRate: 1.8,       // rad/s con steer a tope
-  maxHeading: 1.1,     // rad
+  maxHeading: 0.9,     // rad
   jumpLaunchFactor: 0.22,
   minJumpVy: 2.5,
   fallPenalty: 3.0,    // segundos parado tras caerse
