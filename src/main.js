@@ -251,43 +251,67 @@ function makeRibbon(track, latA, latB, color, drop, map) {
   return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, map, side: THREE.DoubleSide }));
 }
 
-function makeTrees(track) {
-  const group = new THREE.Group();
-  const rng = mulberry32(42);
-  const positions = [];
-  for (let s = 5; s < track.length - 5; s += 5) {
-    for (const sideSign of [-1, 1]) {
-      if (rng() < 0.75) {
-        positions.push({
-          s,
-          lat: sideSign * (track.width / 2 + 2 + rng() * 12),
-          scale: 0.8 + rng() * 0.7,
-        });
-      }
-    }
-  }
-  for (const o of track.obstacles) {
-    if (o.type === 'tree') positions.push({ s: o.s, lat: o.lat, scale: 1 });
-  }
+// Dos especies: abeto clásico (ancho) y abeto alto y delgado de verde más oscuro.
+// Función (no const) para que esté disponible al construir la escena al cargar el módulo.
+function treeSpecies() {
+  return {
+    standard: {
+      foliage: { radius: 1.6, height: 4.5, color: 0x1d5c33, y: 2.8 },
+      trunk: { rTop: 0.25, rBottom: 0.3, height: 1.6, color: 0x5a3d24, y: 0.8 },
+    },
+    tall: {
+      foliage: { radius: 0.85, height: 7.5, color: 0x0e3a1f, y: 5.4 },
+      trunk: { rTop: 0.16, rBottom: 0.2, height: 2.2, color: 0x4a3220, y: 1.1 },
+    },
+  };
+}
+
+function buildTreeInstances(track, positions, species) {
   const foliage = new THREE.InstancedMesh(
-    new THREE.ConeGeometry(1.6, 4.5, 8),
-    new THREE.MeshLambertMaterial({ color: 0x1d5c33 }),
+    new THREE.ConeGeometry(species.foliage.radius, species.foliage.height, 8),
+    new THREE.MeshLambertMaterial({ color: species.foliage.color }),
     positions.length,
   );
   const trunk = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(0.25, 0.3, 1.6, 6),
-    new THREE.MeshLambertMaterial({ color: 0x5a3d24 }),
+    new THREE.CylinderGeometry(species.trunk.rTop, species.trunk.rBottom, species.trunk.height, 6),
+    new THREE.MeshLambertMaterial({ color: species.trunk.color }),
     positions.length,
   );
   const m = new THREE.Matrix4();
   positions.forEach((p, i) => {
     const w = track.toWorld(p.s, p.lat, 0);
-    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + 2.8 * p.scale, w.z);
+    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.foliage.y * p.scale, w.z);
     foliage.setMatrixAt(i, m);
-    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + 0.8 * p.scale, w.z);
+    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.trunk.y * p.scale, w.z);
     trunk.setMatrixAt(i, m);
   });
-  group.add(foliage, trunk);
+  return [foliage, trunk];
+}
+
+function makeTrees(track) {
+  const group = new THREE.Group();
+  const rng = mulberry32(42);
+  const standard = [];
+  const tall = [];
+  for (let s = 5; s < track.length - 5; s += 5) {
+    for (const sideSign of [-1, 1]) {
+      if (rng() < 0.75) {
+        const p = {
+          s,
+          lat: sideSign * (track.width / 2 + 2 + rng() * 12),
+          scale: 0.8 + rng() * 0.7,
+        };
+        (rng() < 0.3 ? tall : standard).push(p);
+      }
+    }
+  }
+  for (const o of track.obstacles) {
+    if (o.type !== 'tree') continue;
+    (o.variant === 'tall' ? tall : standard).push({ s: o.s, lat: o.lat, scale: 1 });
+  }
+  const species = treeSpecies();
+  group.add(...buildTreeInstances(track, standard, species.standard));
+  group.add(...buildTreeInstances(track, tall, species.tall));
   return group;
 }
 
