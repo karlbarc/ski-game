@@ -7,6 +7,9 @@ export const PARAMS = {
   maxHeading: 1.1,     // rad
   jumpLaunchFactor: 0.22,
   minJumpVy: 2.5,
+  rampLength: 6,       // la rampa sube desde o.s - rampLength hasta el labio en o.s
+  rampHeight: 1.3,
+  rampHalfWidth: 3.5,
   fallPenalty: 3.0,    // segundos parado tras caerse
   maxSpeed: 45,
   crawlSpeed: 1.5,      // por debajo de esto, el freno de carving se desactiva (evita soft-lock)
@@ -87,13 +90,29 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
 
   const halfWidth = track.width / 2;
 
-  for (const o of track.obstacles) {
-    if (o.type === 'jump' && !st.airborne && sPrev < o.s && st.s >= o.s
-        && Math.abs(st.lat - o.lat) < 3.5) {
-      st.airborne = true;
-      st.height = 0.01;
-      st.vy = Math.max(params.minJumpVy, st.speed * params.jumpLaunchFactor);
+  // Rampas: la altura sigue el plano inclinado hasta el labio (o.s) y ahí despega.
+  if (!st.airborne) {
+    let onRamp = false;
+    for (const o of track.obstacles) {
+      if (o.type !== 'jump' || Math.abs(st.lat - o.lat) >= params.rampHalfWidth) continue;
+      if (st.s >= o.s - params.rampLength && st.s < o.s) {
+        st.height = params.rampHeight * (st.s - (o.s - params.rampLength)) / params.rampLength;
+        onRamp = true;
+      } else if (sPrev < o.s && st.s >= o.s) {
+        st.airborne = true;
+        st.height = params.rampHeight;
+        st.vy = Math.max(params.minJumpVy, st.speed * params.jumpLaunchFactor);
+        onRamp = true;
+      }
     }
+    if (!onRamp && !st.airborne && st.height > 0) {
+      // Se salió de la rampa por un lado: cae desde esa altura.
+      st.airborne = true;
+      st.vy = 0;
+    }
+  }
+
+  for (const o of track.obstacles) {
     if ((o.type === 'tree' || o.type === 'rock') && !st.airborne
         && Math.abs(st.s - o.s) < 1.6 && Math.abs(st.lat - o.lat) < 1.2) {
       fall(st, halfWidth, params, o);

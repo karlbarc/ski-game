@@ -315,13 +315,15 @@ function makeRampGeometry(width, height, length) {
 
 function makeRamps(track) {
   const group = new THREE.Group();
-  const geometry = makeRampGeometry(7, 1.3, 6);
+  // Mismas dimensiones que la física (PARAMS): el labio queda en o.s.
+  const geometry = makeRampGeometry(PARAMS.rampHalfWidth * 2, PARAMS.rampHeight, PARAMS.rampLength);
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   for (const o of track.obstacles) {
     if (o.type !== 'jump') continue;
-    const f = track.frameAt(o.s);
+    const centerS = o.s - PARAMS.rampLength / 2;
+    const f = track.frameAt(centerS);
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(track.toWorld(o.s, o.lat, 0.05));
+    mesh.position.copy(track.toWorld(centerS, o.lat, 0.05));
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), f.tan);
     group.add(mesh);
   }

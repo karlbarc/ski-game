@@ -92,6 +92,22 @@ test('fall recovers after the penalty', () => {
   assert.equal(st.fallen, false);
 });
 
+test('the ramp raises the player before takeoff instead of clipping through', () => {
+  const jump = track.obstacles.find((o) => o.type === 'jump');
+  let st = { ...createPlayerState(), s: jump.s - 8, lat: jump.lat, speed: 10 };
+  while (st.s < jump.s - 2) st = stepPlayer(st, 0, 1 / 60, track);
+  assert.equal(st.airborne, false, 'still on the ramp, not airborne yet');
+  assert.ok(st.height > 0.5, `height=${st.height} — should be riding up the ramp`);
+});
+
+test('takeoff happens at the lip with ramp height', () => {
+  const jump = track.obstacles.find((o) => o.type === 'jump');
+  let st = { ...createPlayerState(), s: jump.s - 8, lat: jump.lat, speed: 12 };
+  st = run(st, 0, 1.2);
+  assert.equal(st.airborne, true);
+  assert.ok(st.height >= 1, `height=${st.height} — should launch from the top of the ramp`);
+});
+
 test('ramps launch the player and steering is locked in the air', () => {
   const jump = track.obstacles.find((o) => o.type === 'jump');
   let st = { ...createPlayerState(), s: jump.s - 3, lat: jump.lat, speed: 14 };
