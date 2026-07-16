@@ -676,9 +676,10 @@ function makeCrowd(track, finishS) {
   const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.55, 6);
   const skin = new THREE.MeshLambertMaterial({ color: 0xd9a06a });
   for (let i = 0; i < 12; i++) {
+    // Apiñados justo después de la meta, pegados al borde de la pista.
     const side = i % 2 === 0 ? 1 : -1;
-    const s = finishS - 18 + rng() * 22;
-    const lat = side * (track.width / 2 + 1.5 + rng() * 2.5);
+    const s = finishS + 3 + rng() * 11;
+    const lat = side * (track.width / 2 + 0.6 + rng() * 1.2);
     const jacket = new THREE.MeshLambertMaterial({ color: jackets[i % jackets.length] });
     const fig = new THREE.Group();
     const body = new THREE.Mesh(bodyGeo, jacket);
