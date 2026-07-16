@@ -36,6 +36,9 @@ export const verde = {
     { type: 'tree', t: 0.8, variant: 'tall', offset: -2 },
     { type: 'rock', t: 0.84, offset: -3.5 },
     { type: 'tree', t: 0.88, offset: 3 },
+    { type: 'rock', t: 0.9, offset: -2 },
     { type: 'tree', t: 0.93, variant: 'tall', offset: 2.5 },
+    { type: 'tree', t: 0.945, variant: 'tall', offset: -3 },
+    { type: 'rock', t: 0.965, offset: 2 },
   ],
 };
