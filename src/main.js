@@ -23,14 +23,14 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xbfdcf5);
-scene.fog = new THREE.Fog(0xbfdcf5, 60, 260);
+scene.background = new THREE.Color(0xcfe8fb);
+scene.fog = new THREE.Fog(0xcfe8fb, 60, 260);
 scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.1));
 const sun = new THREE.DirectionalLight(0xffffff, 1.2);
 sun.position.set(80, 120, -40);
 scene.add(sun);
 
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 500);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 3000);
 const skis = makeSkis();
 camera.add(skis);
 scene.add(camera); // necesario para que se rendericen los hijos de la cámara
@@ -48,6 +48,11 @@ scene.add(makeRocks(track));
 scene.add(makeRamps(track));
 scene.add(makeGate(track, START_S, 0xd04040));
 scene.add(makeGate(track, FINISH_S, 0x3050c0));
+
+const sceneryCenter = track.toWorld(track.length / 2, 0, 0);
+scene.add(makeSky(sceneryCenter));
+scene.add(makeMountains(sceneryCenter));
+scene.add(makeClouds(sceneryCenter));
 
 let player = createPlayerState();
 let race = createRace(START_S, FINISH_S);
@@ -186,6 +191,95 @@ window.__game = { state: () => ({ player, race, paused }), trackLength: track.le
 
 // ---------- construcción de la escena ----------
 
+// Cúpula de cielo con degradé: pálido en el horizonte, azul intenso en el cenit.
+function makeSky(center) {
+  const radius = 1800;
+  const geo = new THREE.SphereGeometry(radius, 16, 12);
+  const posAttr = geo.getAttribute('position');
+  const horizon = new THREE.Color(0xcfe8fb);
+  const zenith = new THREE.Color(0x3f86d8);
+  const colors = [];
+  for (let i = 0; i < posAttr.count; i++) {
+    const t = Math.max(0, posAttr.getY(i) / radius);
+    const c = horizon.clone().lerp(zenith, Math.pow(t, 0.7));
+    colors.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }),
+  );
+  mesh.position.copy(center);
+  return mesh;
+}
+
+// Cordillera nevada low-poly en anillo alrededor de la pista.
+function makeMountains(center) {
+  const rng = mulberry32(2024);
+  const peaks = [];
+  const count = 16;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + (rng() - 0.5) * 0.3;
+    const dist = 700 + rng() * 350;
+    const height = 180 + rng() * 220;
+    const radius = height * (0.7 + rng() * 0.4);
+    const peak = new THREE.ConeGeometry(radius, height, 5 + Math.floor(rng() * 3));
+    peak.rotateY(rng() * Math.PI);
+    peak.translate(
+      center.x + Math.cos(angle) * dist,
+      center.y - 60 + height / 2,
+      center.z + Math.sin(angle) * dist,
+    );
+    peaks.push(peak);
+  }
+  const mesh = new THREE.Mesh(
+    mergeGeometries(peaks),
+    // Emisivo azulado: levanta las caras en sombra como nieve iluminada por el cielo.
+    new THREE.MeshLambertMaterial({
+      color: 0xf2f7fd,
+      emissive: 0x8ba4c2,
+      emissiveIntensity: 0.45,
+      flatShading: true,
+      fog: false,
+    }),
+  );
+  return mesh;
+}
+
+// Nubes: racimos de esferas aplastadas, blancas y mate.
+function makeClouds(center) {
+  const rng = mulberry32(31);
+  const puffs = [];
+  for (let i = 0; i < 10; i++) {
+    const angle = rng() * Math.PI * 2;
+    const dist = 150 + rng() * 650;
+    const cx = center.x + Math.cos(angle) * dist;
+    const cy = center.y + 170 + rng() * 160;
+    const cz = center.z + Math.sin(angle) * dist;
+    const clusterScale = 18 + rng() * 16;
+    const n = 3 + Math.floor(rng() * 3);
+    for (let j = 0; j < n; j++) {
+      const puff = new THREE.SphereGeometry(1, 8, 6);
+      puff.scale(
+        clusterScale * (1.1 + rng() * 0.5),
+        clusterScale * (0.5 + rng() * 0.3),
+        clusterScale * (0.9 + rng() * 0.4),
+      );
+      puff.translate(
+        cx + (rng() - 0.5) * clusterScale * 1.8,
+        cy + (rng() - 0.5) * clusterScale * 0.5,
+        cz + (rng() - 0.5) * clusterScale * 1.4,
+      );
+      puffs.push(puff);
+    }
+  }
+  // Blanco plano sin sombreado: lectura limpia de nube de dibujo animado.
+  return new THREE.Mesh(
+    mergeGeometries(puffs),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }),
+  );
+}
+
 // Textura de nieve procedural: gránulos y manchas suaves sobre blanco.
 function makeSnowTexture() {
   const size = 256;
@@ -253,16 +347,20 @@ function makeRibbon(track, latA, latB, color, drop, map) {
 
 // Une varias geometrías (pequeñas) en una sola, para copas por pisos.
 function mergeGeometries(geometries) {
-  const pos = [];
-  const norm = [];
-  for (const g of geometries) {
-    const ng = g.toNonIndexed();
-    pos.push(...ng.getAttribute('position').array);
-    norm.push(...ng.getAttribute('normal').array);
+  const parts = geometries.map((g) => g.toNonIndexed());
+  let floats = 0;
+  for (const g of parts) floats += g.getAttribute('position').array.length;
+  const pos = new Float32Array(floats);
+  const norm = new Float32Array(floats);
+  let offset = 0;
+  for (const g of parts) {
+    pos.set(g.getAttribute('position').array, offset);
+    norm.set(g.getAttribute('normal').array, offset);
+    offset += g.getAttribute('position').array.length;
   }
   const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
   return out;
 }
 
