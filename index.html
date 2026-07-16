@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ski Verde</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; touch-action: none; font-family: system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; }
+  .overlay { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: rgba(10, 30, 50, 0.75); color: #fff; text-align: center; z-index: 10; padding: 24px; }
+  .overlay.visible { display: flex; }
+  .overlay h1 { font-size: 2.2rem; }
+  .overlay button { font-size: 1.3rem; padding: 14px 36px; border: none; border-radius: 10px; background: #2f80d0; color: #fff; }
+  .overlay button:active { background: #1f5f9f; }
+  #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); font-size: 1.4rem; font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none; }
+  #message { position: fixed; top: 20%; width: 100%; text-align: center; color: #ffdd57; font-size: 1.6rem; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,.7); opacity: 0; transition: opacity .3s; z-index: 5; pointer-events: none; }
+  #message.visible { opacity: 1; }
+  #finish-record { color: #ffdd57; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="hud"><span id="timer">00:00.00</span><span id="speed">0 km/h</span></div>
+<div id="message"></div>
+<div id="start-screen" class="overlay visible">
+  <h1>⛷️ Pista Verde</h1>
+  <p>Baja lo más rápido posible sin caerte.<br>Mantén pulsado un lado de la pantalla para girar.</p>
+  <button id="btn-touch">Jugar (táctil)</button>
+  <button id="btn-gyro">Jugar (giroscopio)</button>
+</div>
+<div id="finish-screen" class="overlay">
+  <h1>🏁 ¡Meta!</h1>
+  <p id="finish-time"></p>
+  <p id="finish-best"></p>
+  <p id="finish-record" style="display:none">¡Nuevo récord!</p>
+  <button id="btn-restart">Reintentar</button>
+</div>
+<div id="error-screen" class="overlay"><h1>Tu navegador no soporta WebGL</h1></div>
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
