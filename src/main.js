@@ -94,11 +94,14 @@ document.getElementById('btn-resume').addEventListener('click', resumeGame);
 document.getElementById('btn-restart-pause').addEventListener('click', restart);
 document.getElementById('btn-continue').addEventListener('click', standUp);
 document.getElementById('btn-restart-fall').addEventListener('click', restart);
-document.getElementById('btn-menu').addEventListener('click', () => {
-  restart();
+function goToMenu() {
+  restart(); // resetea carrera y oculta overlays de meta/caída/pausa
   started = false;
   document.getElementById('start-screen').classList.add('visible');
-});
+}
+document.getElementById('btn-menu').addEventListener('click', goToMenu);
+document.getElementById('btn-menu-fall').addEventListener('click', goToMenu);
+document.getElementById('btn-menu-pause').addEventListener('click', goToMenu);
 
 // Selector de pista en el menú de inicio (o ?track=azul para e2e)
 let selectedTrack = TRACKS[query.get('track')] ? query.get('track') : 'verde';
