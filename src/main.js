@@ -469,41 +469,62 @@ function makeTrees(track) {
   return group;
 }
 
-// Ski en una sola pieza: cuerpo recto y una curva suave hacia arriba solo en la
-// punta (segmentos cortos con ángulo progresivo, fusionados — sin quiebres).
+// Ski como plancha continua: cuerpo recto, y en la punta una pala que sube con
+// curva suave, se ensancha un poco y remata redondeada (como un ski real).
 function makeSkiGeometry() {
-  const pts = [[0.35, 0], [-0.85, 0]]; // tramo recto (z, y)
-  const tipStart = -0.85;
-  const tipLen = 0.35;
-  const curveK = 2.2; // curvatura de la punta (y = k/2 · d²)
-  const steps = 6;
-  for (let i = 1; i <= steps; i++) {
-    const d = (i / steps) * tipLen;
-    pts.push([tipStart - d, (curveK / 2) * d * d]);
+  const zFront = 0.35;   // extremo trasero (bajo la cámara)
+  const length = 1.55;
+  const tipLen = 0.4;    // largo de la pala
+  const curveK = 2.2;    // subida de la punta (y = k/2 · d²)
+  const halfW = 0.055;
+  const thick = 0.03;
+  const N = 48;
+  const zTipStart = zFront - length + tipLen;
+
+  // Perfil por secciones: posición z, altura del eje y semiancho
+  const rows = [];
+  for (let i = 0; i <= N; i++) {
+    const z = zFront - (i / N) * length;
+    let y = 0;
+    let w = halfW;
+    if (z < zTipStart) {
+      const d = zTipStart - z;
+      const t = d / tipLen; // 0..1 dentro de la pala
+      y = (curveK / 2) * d * d;
+      let m = 1 + 0.3 * Math.sin(Math.PI * Math.min(1, t)); // la pala se ensancha
+      if (t > 0.75) m *= Math.sqrt(Math.max(0, 1 - ((t - 0.75) / 0.25) ** 2)); // remate redondeado
+      w = halfW * m;
+    }
+    rows.push({ z, y, w });
   }
-  const parts = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [z0, y0] = pts[i];
-    const [z1, y1] = pts[i + 1];
-    const len = Math.hypot(z1 - z0, y1 - y0);
-    const seg = new THREE.BoxGeometry(0.11, 0.03, len + 0.015); // solape mínimo entre tramos
-    seg.rotateX(Math.atan2(y1 - y0, -(z1 - z0)));
-    seg.translate(0, (y0 + y1) / 2, (z0 + z1) / 2);
-    parts.push(seg);
+
+  const pos = [];
+  const quad = (a, b, c, d) => pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+  const corners = (r) => ({
+    tl: [-r.w, r.y + thick / 2, r.z], tr: [r.w, r.y + thick / 2, r.z],
+    bl: [-r.w, r.y - thick / 2, r.z], br: [r.w, r.y - thick / 2, r.z],
+  });
+  for (let i = 0; i < N; i++) {
+    const a = corners(rows[i]);
+    const b = corners(rows[i + 1]);
+    quad(a.tl, a.tr, b.tr, b.tl); // cara superior
+    quad(a.bl, b.bl, b.br, a.br); // cara inferior
+    quad(a.tl, b.tl, b.bl, a.bl); // canto izquierdo
+    quad(a.tr, a.br, b.br, b.tr); // canto derecho
   }
-  // Remate redondeado en el extremo de la punta
-  const [zEnd, yEnd] = pts[pts.length - 1];
-  const cap = new THREE.SphereGeometry(0.055, 8, 6);
-  cap.scale(1, 0.35, 1.4);
-  cap.translate(0, yEnd, zEnd);
-  parts.push(cap);
-  return mergeGeometries(parts);
+  const back = corners(rows[0]);
+  quad(back.tl, back.bl, back.br, back.tr); // tapa trasera
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
 }
 
 // Skis en primera persona, colgados de la cámara; se cantean al girar.
 function makeSkis() {
   const group = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: 0xd23c3c });
+  const mat = new THREE.MeshLambertMaterial({ color: 0xd23c3c, side: THREE.DoubleSide });
   const geo = makeSkiGeometry();
   for (const x of [-0.16, 0.16]) {
     const ski = new THREE.Mesh(geo, mat);
