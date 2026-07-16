@@ -25,6 +25,24 @@ test('steering changes heading and drifts laterally', () => {
   assert.ok(st.lat > 0.1, `lat=${st.lat}`);
 });
 
+test('pointing straight downhill gives a tuck acceleration bonus', () => {
+  const noTuck = { ...PARAMS, tuckAccel: 0 };
+  const withTuck = run({ ...createPlayerState(), speed: 5 }, 0, 2);
+  let plain = { ...createPlayerState(), speed: 5 };
+  const dt = 1 / 60;
+  for (let t = 0; t < 2; t += dt) plain = stepPlayer(plain, 0, dt, track, noTuck);
+  assert.ok(withTuck.speed > plain.speed + 1, `${withTuck.speed} vs ${plain.speed}`);
+});
+
+test('the tuck bonus fades out when carving', () => {
+  // Con heading más allá de tuckWindow no hay bono: mismo resultado con y sin tuckAccel.
+  const noTuck = { ...PARAMS, tuckAccel: 0 };
+  const start = { ...createPlayerState(), s: 30, speed: 8, heading: PARAMS.tuckWindow + 0.1 };
+  const a = stepPlayer(start, 0, 1 / 60, track);
+  const b = stepPlayer(start, 0, 1 / 60, track, noTuck);
+  assert.equal(a.speed, b.speed);
+});
+
 test('carving brakes compared to going straight', () => {
   const straight = run({ ...createPlayerState(), speed: 10 }, 0, 1.2);
   let carving = { ...createPlayerState(), speed: 10 };

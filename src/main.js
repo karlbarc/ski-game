@@ -30,6 +30,9 @@ sun.position.set(80, 120, -40);
 scene.add(sun);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 500);
+const skis = makeSkis();
+camera.add(skis);
+scene.add(camera); // necesario para que se rendericen los hijos de la cámara
 
 const track = buildTrack(verde);
 const START_S = 15;
@@ -48,7 +51,7 @@ let race = createRace(START_S, FINISH_S);
 let started = false;
 let finishShown = false;
 let paused = false;
-let lastSteer = 0;
+let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
 
 const hud = createHud();
 const controls = createControls();
@@ -85,7 +88,7 @@ function restart() {
   race = createRace(START_S, FINISH_S);
   finishShown = false;
   paused = false;
-  lastSteer = 0;
+  steerSmooth = 0;
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
 }
@@ -129,12 +132,16 @@ function updateCamera() {
   const dir = f.tan.clone().multiplyScalar(Math.cos(player.heading))
     .addScaledVector(f.side, Math.sin(player.heading));
   camera.lookAt(pos.clone().add(dir));
-  camera.rotateZ(player.fallen ? 0.5 : lastSteer * 0.12);
+  camera.rotateZ(player.fallen ? 0.5 : steerSmooth * 0.16);
   const fov = Math.min(95, 70 + player.speed * 0.9);
   if (Math.abs(fov - camera.fov) > 0.1) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
+  skis.visible = !player.fallen;
+  skis.rotation.z = steerSmooth * 0.35;   // canteo al girar
+  skis.rotation.y = steerSmooth * 0.12;   // las puntas apuntan hacia el giro
+  skis.rotation.x = player.airborne ? 0.15 : 0;
 }
 
 let last = performance.now();
@@ -144,9 +151,10 @@ function tick(now) {
   last = now;
 
   if (started && !paused && race.status !== 'finished') {
-    lastSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
+    const rawSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
+    steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * 4.5);
     const prev = player;
-    player = stepPlayer(player, lastSteer, dt, track);
+    player = stepPlayer(player, steerSmooth, dt, track);
     race = updateRace(race, player.s, now);
     if (player.fallen && !prev.fallen) hud.flash('¡Te has caído!');
     if (player.airborne && !prev.airborne) hud.flash('¡Salto!', 800);
@@ -231,18 +239,67 @@ function makeTrees(track) {
   return group;
 }
 
+// Puntas de skis en primera persona, colgadas de la cámara; se cantean al girar.
+function makeSkis() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color: 0xd23c3c });
+  for (const x of [-0.16, 0.16]) {
+    const ski = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.03, 1.3), mat);
+    body.position.z = -0.45;
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.03, 0.28), mat);
+    tip.position.set(0, 0.06, -1.2);
+    tip.rotation.x = 0.5; // punta levantada
+    ski.add(body, tip);
+    ski.position.x = x;
+    group.add(ski);
+  }
+  group.position.set(0, -1.05, -0.35);
+  return group;
+}
+
+// Cuña de salto con degradé celeste (clara en la base, saturada en el labio).
+function makeRampGeometry(width, height, length) {
+  const hw = width / 2;
+  const hl = length / 2;
+  // Sube hacia -z (sentido de bajada); cara vertical (labio) en -z.
+  const v = [
+    [-hw, 0, hl], [hw, 0, hl],      // base trasera
+    [hw, height, -hl], [-hw, height, -hl], // labio superior
+    [-hw, 0, -hl], [hw, 0, -hl],    // base delantera
+  ];
+  const baseColor = new THREE.Color(0xeaf6ff);
+  const topColor = new THREE.Color(0x5fb4ef);
+  const positions = [];
+  const colors = [];
+  const push = (...idx) => {
+    for (const i of idx) {
+      positions.push(...v[i]);
+      const c = baseColor.clone().lerp(topColor, v[i][1] / height);
+      colors.push(c.r, c.g, c.b);
+    }
+  };
+  push(0, 1, 2, 0, 2, 3); // plano inclinado
+  push(4, 5, 2, 4, 2, 3); // cara frontal (labio)
+  push(0, 3, 4);          // lateral izquierdo
+  push(1, 2, 5);          // lateral derecho
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 function makeRamps(track) {
   const group = new THREE.Group();
+  const geometry = makeRampGeometry(7, 1.3, 6);
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   for (const o of track.obstacles) {
     if (o.type !== 'jump') continue;
     const f = track.frameAt(o.s);
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(7, 1, 6),
-      new THREE.MeshLambertMaterial({ color: 0xe8f2fb }),
-    );
-    mesh.position.copy(track.toWorld(o.s, o.lat, 0.2));
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(track.toWorld(o.s, o.lat, 0.05));
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), f.tan);
-    mesh.rotateX(-0.18);
     group.add(mesh);
   }
   return group;

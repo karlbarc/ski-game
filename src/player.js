@@ -10,6 +10,8 @@ export const PARAMS = {
   fallPenalty: 3.0,    // segundos parado tras caerse
   maxSpeed: 45,
   crawlSpeed: 1.5,      // por debajo de esto, el freno de carving se desactiva (evita soft-lock)
+  tuckAccel: 1.6,       // bono de aceleración al ir en línea (m/s², se desvanece al girar)
+  tuckWindow: 0.35,     // rad de heading dentro de los cuales aplica el bono
 };
 
 export function createPlayerState() {
@@ -52,7 +54,9 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
     const carveBrake = st.speed > params.crawlSpeed
       ? params.carveBrake * Math.abs(Math.sin(st.heading))
       : 0;
+    const tuck = params.tuckAccel * Math.max(0, 1 - Math.abs(st.heading) / params.tuckWindow);
     const accel = params.gravity * slope * Math.cos(st.heading)
+      + tuck
       - params.friction
       - params.drag * st.speed * st.speed
       - carveBrake;
