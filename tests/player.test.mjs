@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from '../src/player.js';
 import { buildTrack } from '../src/track.js';
 import { verde } from '../src/tracks/verde.js';
+import { azul } from '../src/tracks/azul.js';
+import { negra } from '../src/tracks/negra.js';
 
 const track = buildTrack(verde);
 
@@ -79,6 +81,27 @@ test('after an obstacle fall the player recovers clear of it (no repeat collisio
   st = run(st, 0, 2); // se levanta y sigue recto sin girar
   assert.equal(st.fallen, false, 'player fell again on the same obstacle');
   assert.ok(st.s > rock.s + 2, `player should be past the obstacle, s=${st.s} vs rock ${rock.s}`);
+});
+
+test('fall respawn is always clear and inside the piste, on every track', () => {
+  const dt = 1 / 60;
+  for (const data of [verde, azul, negra]) {
+    const tr = buildTrack(data);
+    for (const o of tr.obstacles) {
+      if (o.type === 'jump') continue;
+      // choca de frente contra el obstáculo
+      let st = { ...createPlayerState(), s: o.s - 6, lat: o.lat, speed: 12 };
+      for (let t = 0; t < 1.5 && !st.fallen; t += dt) st = stepPlayer(st, 0, dt, tr);
+      assert.equal(st.fallen, true, `${data.name} t=${o.t}: should have crashed`);
+      assert.ok(Math.abs(st.lat) <= data.width / 2 - 0.9,
+        `${data.name} t=${o.t}: respawn outside piste (lat=${st.lat})`);
+      // se levanta y sigue recto: no debe volver a caer de inmediato
+      st = recoverPlayer(st);
+      for (let t = 0; t < 2; t += dt) st = stepPlayer(st, 0, dt, tr);
+      assert.equal(st.fallen, false,
+        `${data.name} t=${o.t}: re-fell right after recovering (lat=${st.lat.toFixed(2)})`);
+    }
+  }
 });
 
 test('going off-piste causes a fall and re-centers inside the track', () => {

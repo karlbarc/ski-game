@@ -30,23 +30,39 @@ export function recoverPlayer(state) {
   return { ...state, fallen: false };
 }
 
-function fall(st, halfWidth, params, obstacle) {
+// Busca una posición lateral dentro de la pista despejada de todos los
+// obstáculos cercanos (un poco por detrás y varios metros por delante),
+// para que al levantarte y arrancar recto no vuelvas a chocar.
+function findClearLat(track, s, preferredLat) {
+  const edge = track.width / 2 - 1;
+  const nearby = track.obstacles.filter((o) =>
+    (o.type === 'tree' || o.type === 'rock') && o.s > s - 2 && o.s < s + 10);
+  const isClear = (lat) => nearby.every((o) => Math.abs(lat - o.lat) >= 1.8);
+  const candidates = [preferredLat, 0];
+  for (let d = 1; d <= edge; d += 0.5) candidates.push(d, -d);
+  for (const lat of candidates) {
+    const clamped = Math.max(-edge, Math.min(edge, lat));
+    if (isClear(clamped)) return clamped;
+  }
+  return 0; // sin hueco perfecto (no debería ocurrir): al centro
+}
+
+function fall(st, track, params, obstacle) {
   st.fallen = true;
   st.speed = 0;
   st.heading = 0;
   st.airborne = false;
   st.height = 0;
   st.vy = 0;
+  let preferred = st.lat;
   if (obstacle) {
-    // Te levantas justo detrás del obstáculo y a un lado, fuera de su
-    // zona de colisión, para no volver a chocar con lo mismo al arrancar.
+    // Te levantas detrás del obstáculo, en el lado por el que venías.
     st.s = obstacle.s - 2.5;
     const delta = st.lat - obstacle.lat;
     const side = delta !== 0 ? Math.sign(delta) : (obstacle.lat > 0 ? -1 : 1);
-    st.lat = obstacle.lat + side * 1.8;
+    preferred = obstacle.lat + side * 1.8;
   }
-  const edge = halfWidth - 1;
-  st.lat = Math.max(-edge, Math.min(edge, st.lat));
+  st.lat = findClearLat(track, st.s, preferred);
 }
 
 export function stepPlayer(state, steer, dt, track, params = PARAMS) {
@@ -112,13 +128,13 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
   for (const o of track.obstacles) {
     if ((o.type === 'tree' || o.type === 'rock') && !st.airborne
         && Math.abs(st.s - o.s) < 1.6 && Math.abs(st.lat - o.lat) < 1.2) {
-      fall(st, halfWidth, params, o);
+      fall(st, track, params, o);
       return st;
     }
   }
 
   if (!st.airborne && Math.abs(st.lat) > halfWidth) {
-    fall(st, halfWidth, params);
+    fall(st, track, params);
   }
 
   return st;
