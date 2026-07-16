@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { buildTrack, mulberry32 } from './track.js?v=0';
-import { verde } from './tracks/verde.js?v=0';
-import { azul } from './tracks/azul.js?v=0';
-import { negra } from './tracks/negra.js?v=0';
-import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=0';
+import { buildTrack, mulberry32 } from './track.js?v=1784245547';
+import { verde } from './tracks/verde.js?v=1784245547';
+import { azul } from './tracks/azul.js?v=1784245547';
+import { negra } from './tracks/negra.js?v=1784245547';
+import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=1784245547';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
-} from './race.js?v=0';
-import { createControls } from './controls.js?v=0';
-import { createHud } from './hud.js?v=0';
-import { createSnowSound } from './audio.js?v=0';
+} from './race.js?v=1784245547';
+import { createControls } from './controls.js?v=1784245547';
+import { createHud } from './hud.js?v=1784245547';
+import { createSnowSound } from './audio.js?v=1784245547';
 
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
