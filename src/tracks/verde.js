@@ -1,0 +1,31 @@
+// Pista Verde (fácil): ~780 m, eses amplias, 2 saltos, árboles sueltos dentro de la pista.
+export const verde = {
+  name: 'Verde',
+  width: 16,
+  controlPoints: [
+    [0, 0, 0],
+    [0, -9, -70],
+    [22, -18, -135],
+    [42, -27, -195],
+    [30, -36, -255],
+    [-8, -46, -310],
+    [-38, -57, -365],
+    [-30, -68, -425],
+    [5, -79, -480],
+    [32, -90, -535],
+    [18, -100, -595],
+    [0, -108, -655],
+    [0, -114, -720],
+  ],
+  obstacles: [
+    { type: 'jump', t: 0.07, offset: 0 },
+    { type: 'tree', t: 0.18, offset: 3 },
+    { type: 'tree', t: 0.26, offset: -4 },
+    { type: 'tree', t: 0.38, offset: 2 },
+    { type: 'tree', t: 0.47, offset: -3 },
+    { type: 'jump', t: 0.6, offset: 0 },
+    { type: 'tree', t: 0.72, offset: 4 },
+    { type: 'tree', t: 0.8, offset: -2 },
+    { type: 'tree', t: 0.88, offset: 3 },
+  ],
+};
