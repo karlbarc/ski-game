@@ -251,40 +251,72 @@ function makeRibbon(track, latA, latB, color, drop, map) {
   return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, map, side: THREE.DoubleSide }));
 }
 
-// Dos especies: abeto clásico (ancho) y abeto alto y delgado de verde más oscuro.
+// Une varias geometrías (pequeñas) en una sola, para copas por pisos.
+function mergeGeometries(geometries) {
+  const pos = [];
+  const norm = [];
+  for (const g of geometries) {
+    const ng = g.toNonIndexed();
+    pos.push(...ng.getAttribute('position').array);
+    norm.push(...ng.getAttribute('normal').array);
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(norm, 3));
+  return out;
+}
+
+// Dos especies: abeto clásico (ancho) y abeto alto de verde oscuro con copa en pisos.
 // Función (no const) para que esté disponible al construir la escena al cargar el módulo.
 function treeSpecies() {
+  const tallFoliage = mergeGeometries([
+    new THREE.ConeGeometry(1.35, 3.2, 8).translate(0, 1.2, 0),
+    new THREE.ConeGeometry(1.05, 2.8, 8).translate(0, 3.0, 0),
+    new THREE.ConeGeometry(0.7, 2.4, 8).translate(0, 4.8, 0),
+  ]);
   return {
     standard: {
-      foliage: { radius: 1.6, height: 4.5, color: 0x1d5c33, y: 2.8 },
-      trunk: { rTop: 0.25, rBottom: 0.3, height: 1.6, color: 0x5a3d24, y: 0.8 },
+      foliageGeo: new THREE.ConeGeometry(1.6, 4.5, 8),
+      foliageColor: 0x1d5c33,
+      foliageY: 2.8,
+      trunkGeo: new THREE.CylinderGeometry(0.25, 0.3, 1.6, 6),
+      trunkColor: 0x5a3d24,
+      trunkY: 0.8,
     },
     tall: {
-      foliage: { radius: 0.85, height: 7.5, color: 0x0e3a1f, y: 5.4 },
-      trunk: { rTop: 0.16, rBottom: 0.2, height: 2.2, color: 0x4a3220, y: 1.1 },
+      foliageGeo: tallFoliage,
+      foliageColor: 0x0e3a1f,
+      foliageY: 1.4, // la copa por pisos arranca sobre el tronco (offsets ya en la geometría)
+      trunkGeo: new THREE.CylinderGeometry(0.16, 0.22, 2.4, 6),
+      trunkColor: 0x4a3220,
+      trunkY: 1.2,
     },
   };
 }
 
 function buildTreeInstances(track, positions, species) {
   const foliage = new THREE.InstancedMesh(
-    new THREE.ConeGeometry(species.foliage.radius, species.foliage.height, 8),
-    new THREE.MeshLambertMaterial({ color: species.foliage.color }),
+    species.foliageGeo,
+    new THREE.MeshLambertMaterial({ color: species.foliageColor, flatShading: true }),
     positions.length,
   );
   const trunk = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(species.trunk.rTop, species.trunk.rBottom, species.trunk.height, 6),
-    new THREE.MeshLambertMaterial({ color: species.trunk.color }),
+    species.trunkGeo,
+    new THREE.MeshLambertMaterial({ color: species.trunkColor }),
     positions.length,
   );
   const m = new THREE.Matrix4();
+  const rng = mulberry32(1234);
   positions.forEach((p, i) => {
     const w = track.toWorld(p.s, p.lat, 0);
-    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.foliage.y * p.scale, w.z);
+    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.foliageY * p.scale, w.z);
     foliage.setMatrixAt(i, m);
-    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.trunk.y * p.scale, w.z);
+    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.trunkY * p.scale, w.z);
     trunk.setMatrixAt(i, m);
+    const v = 0.85 + rng() * 0.3; // variación sutil de tono por árbol
+    foliage.setColorAt(i, new THREE.Color(v, v, v));
   });
+  if (foliage.instanceColor) foliage.instanceColor.needsUpdate = true;
   return [foliage, trunk];
 }
 
