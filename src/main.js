@@ -243,12 +243,16 @@ function makeTrees(track) {
 function makeSkis() {
   const group = new THREE.Group();
   const mat = new THREE.MeshLambertMaterial({ color: 0xd23c3c });
+  // Punta redondeada: cápsula tumbada a lo largo de z y aplastada al grosor del ski.
+  const tipGeo = new THREE.CapsuleGeometry(0.055, 0.2, 4, 10);
+  tipGeo.rotateX(Math.PI / 2);
+  tipGeo.scale(1, 0.28, 1);
   for (const x of [-0.16, 0.16]) {
     const ski = new THREE.Group();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.03, 1.3), mat);
     body.position.z = -0.45;
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.03, 0.28), mat);
-    tip.position.set(0, 0.06, -1.2);
+    const tip = new THREE.Mesh(tipGeo, mat);
+    tip.position.set(0, 0.06, -1.18);
     tip.rotation.x = 0.5; // punta levantada
     ski.add(body, tip);
     ski.position.x = x;

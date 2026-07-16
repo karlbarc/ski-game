@@ -16,13 +16,15 @@
   #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); font-size: 1.4rem; font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none; }
   #btn-pause { pointer-events: auto; background: rgba(10,30,50,.45); border: none; color: #fff; font-size: 1.2rem; border-radius: 8px; padding: 4px 16px; text-shadow: none; }
   #btn-pause:active { background: rgba(10,30,50,.7); }
+  #speed-bar { width: 96px; height: 12px; border-radius: 6px; background: rgba(10,30,50,.45); overflow: hidden; }
+  #speed-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #7fd4ff, #ffdd57 65%, #e04848); background-size: 96px 100%; transition: width .15s linear; }
   #message { position: fixed; top: 20%; width: 100%; text-align: center; color: #ffdd57; font-size: 1.6rem; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,.7); opacity: 0; transition: opacity .3s; z-index: 5; pointer-events: none; }
   #message.visible { opacity: 1; }
   #finish-record { color: #ffdd57; font-weight: 700; }
 </style>
 </head>
 <body>
-<div id="hud"><span id="timer">00:00.00</span><button id="btn-pause" aria-label="Pausa">⏸</button><span id="speed">0 km/h</span></div>
+<div id="hud"><span id="timer">00:00.00</span><button id="btn-pause" aria-label="Pausa">⏸</button><div id="speed-bar" aria-label="Velocidad"><div id="speed-fill"></div></div></div>
 <div id="message"></div>
 <div id="start-screen" class="overlay visible">
   <h1>⛷️ Pista Verde</h1>
