@@ -3,6 +3,9 @@
 Juego de ski en primera persona para navegador (móvil y escritorio).
 Baja la pista en el menor tiempo posible sin caerte.
 
+Dos pistas: **Verde** (fácil) y **Azul** (media: más angosta, curvas cerradas
+y más obstáculos). Se eligen en el menú de inicio.
+
 ## Jugar
 
 ```bash

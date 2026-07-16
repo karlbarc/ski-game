@@ -13,6 +13,10 @@
   .overlay h1 { font-size: 2.2rem; }
   .overlay button { font-size: 1.3rem; padding: 14px 36px; border: none; border-radius: 10px; background: #2f80d0; color: #fff; }
   .overlay button:active { background: #1f5f9f; }
+  #track-select { display: flex; gap: 12px; }
+  .track-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: .55; border: 2px solid transparent; }
+  .track-btn small { font-size: .75rem; font-weight: 400; }
+  .track-btn.selected { opacity: 1; border-color: #fff; }
   #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); font-size: 1.4rem; font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none; }
   #btn-pause { pointer-events: auto; background: rgba(10,30,50,.45); border: none; color: #fff; font-size: 1.2rem; border-radius: 8px; padding: 4px 16px; text-shadow: none; }
   #btn-pause:active { background: rgba(10,30,50,.7); }
@@ -30,8 +34,12 @@
 <div id="hud"><span id="timer">00:00.00</span><button id="btn-pause" aria-label="Pausa">⏸</button><div id="speed-group"><div id="speed-bar" aria-label="Velocidad"><div id="speed-fill"></div></div><span id="speed-num"><span id="speed-value">0</span> km/h</span></div></div>
 <div id="message"></div>
 <div id="start-screen" class="overlay visible">
-  <h1>⛷️ Pista Verde</h1>
+  <h1>⛷️ Ski</h1>
   <p>Baja lo más rápido posible sin caerte.<br>Mantén pulsado un lado de la pantalla para girar.</p>
+  <div id="track-select">
+    <button class="track-btn" data-track="verde">🟢 Verde<small>fácil</small></button>
+    <button class="track-btn" data-track="azul">🔵 Azul<small>media</small></button>
+  </div>
   <button id="btn-touch">Jugar (táctil)</button>
   <button id="btn-gyro">Jugar (giroscopio)</button>
 </div>
@@ -42,6 +50,7 @@
   <p id="finish-speed"></p>
   <p id="finish-record" style="display:none">¡Nuevo récord!</p>
   <button id="btn-restart">Reintentar</button>
+  <button id="btn-menu">Menú</button>
 </div>
 <div id="fall-screen" class="overlay">
   <h1>💥 ¡Te has caído!</h1>

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { buildTrack, mulberry32 } from './track.js';
 import { verde } from './tracks/verde.js';
+import { azul } from './tracks/azul.js';
 import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
@@ -38,24 +39,35 @@ const skis = makeSkis();
 camera.add(skis);
 scene.add(camera); // necesario para que se rendericen los hijos de la cámara
 
-const track = buildTrack(verde);
-const START_S = 15;
-const FINISH_S = track.length - 15;
-
+const TRACKS = { verde, azul };
 const snowTexture = makeSnowTexture();
-scene.add(makeRibbon(track, -track.width / 2, track.width / 2, 0xf4f9ff, 0, snowTexture));
-scene.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, 0xdde7ee, 0.15, snowTexture));
-scene.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, 0xdde7ee, 0.15, snowTexture));
-scene.add(makeTrees(track));
-scene.add(makeRocks(track));
-scene.add(makeRamps(track));
-scene.add(makeGate(track, START_S, 0xd04040));
-scene.add(makeGate(track, FINISH_S, 0x3050c0));
 
-const sceneryCenter = track.toWorld(track.length / 2, 0, 0);
-scene.add(makeSky(sceneryCenter));
-scene.add(makeMountains(sceneryCenter));
-scene.add(makeClouds(sceneryCenter));
+let track = null;
+let START_S = 15;
+let FINISH_S = 0;
+let worldGroup = null;
+
+// Construye (o reemplaza) el mundo 3D de la pista seleccionada.
+function loadTrack(data) {
+  if (worldGroup) scene.remove(worldGroup);
+  track = buildTrack(data);
+  START_S = 15;
+  FINISH_S = track.length - 15;
+  worldGroup = new THREE.Group();
+  worldGroup.add(makeRibbon(track, -track.width / 2, track.width / 2, 0xf4f9ff, 0, snowTexture));
+  worldGroup.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, 0xdde7ee, 0.15, snowTexture));
+  worldGroup.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, 0xdde7ee, 0.15, snowTexture));
+  worldGroup.add(makeTrees(track));
+  worldGroup.add(makeRocks(track));
+  worldGroup.add(makeRamps(track));
+  worldGroup.add(makeGate(track, START_S, 0xd04040));
+  worldGroup.add(makeGate(track, FINISH_S, 0x3050c0));
+  const center = track.toWorld(track.length / 2, 0, 0);
+  worldGroup.add(makeSky(center), makeMountains(center), makeClouds(center));
+  scene.add(worldGroup);
+  window.__game.trackLength = track.length;
+  restart();
+}
 
 let player = createPlayerState();
 let race = createRace(START_S, FINISH_S);
@@ -77,6 +89,24 @@ document.getElementById('btn-resume').addEventListener('click', resumeGame);
 document.getElementById('btn-restart-pause').addEventListener('click', restart);
 document.getElementById('btn-continue').addEventListener('click', standUp);
 document.getElementById('btn-restart-fall').addEventListener('click', restart);
+document.getElementById('btn-menu').addEventListener('click', () => {
+  restart();
+  started = false;
+  document.getElementById('start-screen').classList.add('visible');
+});
+
+// Selector de pista en el menú de inicio (o ?track=azul para e2e)
+let selectedTrack = TRACKS[query.get('track')] ? query.get('track') : 'verde';
+for (const btn of document.querySelectorAll('.track-btn')) {
+  btn.classList.toggle('selected', btn.dataset.track === selectedTrack);
+  btn.addEventListener('click', () => {
+    selectedTrack = btn.dataset.track;
+    for (const b of document.querySelectorAll('.track-btn')) {
+      b.classList.toggle('selected', b.dataset.track === selectedTrack);
+    }
+    loadTrack(TRACKS[selectedTrack]);
+  });
+}
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' || e.key.toLowerCase() === 'p') {
@@ -137,11 +167,15 @@ function autopilotSteer() {
   const ahead = track.frameAt(player.s + 8);
   const steerFF = (ahead.curvature * player.speed) / PARAMS.turnRate;
   let latTarget = 0;
+  const room = track.width / 2 - 1.3; // margen para no rozar el borde al esquivar
   for (const o of track.obstacles) {
     if (o.type === 'jump') continue;
     const ds = o.s - player.s;
     if (ds > 0 && ds < 30 && Math.abs(player.lat - o.lat) < 3) {
-      latTarget = o.lat + (player.lat >= o.lat ? 3 : -3);
+      const side = player.lat >= o.lat ? 1 : -1;
+      let target = o.lat + side * 2.8;
+      if (Math.abs(target) > room) target = o.lat - side * 2.8; // sin hueco: por el otro lado
+      latTarget = Math.max(-room, Math.min(room, target));
       break;
     }
   }
@@ -226,7 +260,8 @@ window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-window.__game = { state: () => ({ player, race, paused }), trackLength: track.length };
+window.__game = { state: () => ({ player, race, paused }), trackLength: 0 };
+loadTrack(TRACKS[selectedTrack]);
 
 // ---------- construcción de la escena ----------
 
