@@ -69,6 +69,16 @@ test('hitting a rock causes a fall like a tree', () => {
   assert.equal(st.speed, 0);
 });
 
+test('after an obstacle fall the player recovers clear of it (no repeat collision)', () => {
+  const rock = track.obstacles.find((o) => o.type === 'rock');
+  let st = { ...createPlayerState(), s: rock.s - 5, lat: rock.lat, speed: 12 };
+  st = run(st, 0, 1); // choca y cae
+  assert.equal(st.fallen, true);
+  st = run(st, 0, PARAMS.fallPenalty + 2); // se levanta y sigue recto sin girar
+  assert.equal(st.fallen, false, 'player fell again on the same obstacle');
+  assert.ok(st.s > rock.s + 2, `player should be past the obstacle, s=${st.s} vs rock ${rock.s}`);
+});
+
 test('going off-piste causes a fall and re-centers inside the track', () => {
   let st = { ...createPlayerState(), s: 100, lat: 0, speed: 12 };
   st = run(st, 1, 3);

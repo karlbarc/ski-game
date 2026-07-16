@@ -22,7 +22,7 @@ export function createPlayerState() {
   };
 }
 
-function fall(st, halfWidth, params) {
+function fall(st, halfWidth, params, obstacle) {
   st.fallen = true;
   st.fallTimer = params.fallPenalty;
   st.speed = 0;
@@ -30,6 +30,14 @@ function fall(st, halfWidth, params) {
   st.airborne = false;
   st.height = 0;
   st.vy = 0;
+  if (obstacle) {
+    // Te levantas justo detrás del obstáculo y a un lado, fuera de su
+    // zona de colisión, para no volver a chocar con lo mismo al arrancar.
+    st.s = obstacle.s - 2.5;
+    const delta = st.lat - obstacle.lat;
+    const side = delta !== 0 ? Math.sign(delta) : (obstacle.lat > 0 ? -1 : 1);
+    st.lat = obstacle.lat + side * 1.8;
+  }
   const edge = halfWidth - 1;
   st.lat = Math.max(-edge, Math.min(edge, st.lat));
 }
@@ -88,7 +96,7 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
     }
     if ((o.type === 'tree' || o.type === 'rock') && !st.airborne
         && Math.abs(st.s - o.s) < 1.6 && Math.abs(st.lat - o.lat) < 1.2) {
-      fall(st, halfWidth, params);
+      fall(st, halfWidth, params, o);
       return st;
     }
   }
