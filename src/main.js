@@ -59,9 +59,9 @@ document.getElementById('btn-restart').addEventListener('click', restart);
 function startGame(mode) {
   controls.setMode(mode).then((ok) => {
     if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
+    hud.hideStart();
+    started = true;
   });
-  hud.hideStart();
-  started = true;
 }
 
 function restart() {
@@ -82,7 +82,8 @@ function autopilotSteer() {
 function finish() {
   finishShown = true;
   const time = race.elapsed;
-  const isRecord = saveBest(localStorage, track.data.name, time);
+  const recordEligible = TIMESCALE === 1 && !AUTOPILOT;
+  const isRecord = recordEligible ? saveBest(localStorage, track.data.name, time) : false;
   const best = loadBest(localStorage, track.data.name);
   hud.showFinish(`Tiempo: ${formatTime(time)}`, `Mejor: ${formatTime(best)}`, isRecord);
 }

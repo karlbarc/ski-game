@@ -30,3 +30,11 @@ test('saveBest only overwrites with better times', () => {
   assert.equal(saveBest(storage, 'Verde', 60), true);
   assert.equal(loadBest(storage, 'Verde'), 60);
 });
+
+test('loadBest treats corrupted stored values as absent', () => {
+  const mem = new Map([['ski-best-Verde', 'garbage']]);
+  const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) };
+  assert.equal(loadBest(storage, 'Verde'), null);
+  assert.equal(saveBest(storage, 'Verde', 60), true);
+  assert.equal(loadBest(storage, 'Verde'), 60);
+});

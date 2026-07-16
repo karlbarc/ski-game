@@ -25,7 +25,9 @@ export function formatTime(sec) {
 
 export function loadBest(storage, trackName) {
   const v = storage.getItem(`ski-best-${trackName}`);
-  return v == null ? null : parseFloat(v);
+  if (v == null) return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function saveBest(storage, trackName, time) {

@@ -73,6 +73,31 @@ test('the player lands after a jump', () => {
   assert.equal(st.height, 0);
 });
 
+test('coasting straight through a curve drifts toward the outside (curvature/heading sign contract)', () => {
+  // Self-locating: scan for the first s with sustained curvature so this survives track tweaks.
+  let s0 = null;
+  let curvature0 = 0;
+  for (let s = 0; s < track.length - 20; s += 10) {
+    const f = track.frameAt(s);
+    const fAhead = track.frameAt(s + 18); // ~1.5s at speed 12
+    if (Math.abs(f.curvature) > 0.005 && Math.sign(f.curvature) === Math.sign(fAhead.curvature)) {
+      s0 = s;
+      curvature0 = f.curvature;
+      break;
+    }
+  }
+  assert.ok(s0 !== null, 'no sustained-curvature segment found on track');
+
+  let st = { ...createPlayerState(), s: s0, lat: 0, heading: 0, speed: 12 };
+  st = run(st, 0, 1.5);
+
+  // curvature > 0 = left turn -> drift right = lat < 0 (and vice versa): lat and curvature have opposite signs.
+  assert.ok(
+    Math.sign(st.lat) === -Math.sign(curvature0),
+    `expected lat to drift opposite curvature sign: curvature=${curvature0}, lat=${st.lat}`,
+  );
+});
+
 test('holding a full turn never soft-locks the player at zero speed', () => {
   // Shallowest part of the track (near the finish): hold full lock from standstill.
   let st = { ...createPlayerState(), s: track.length - 25, lat: 0, speed: 0 };
