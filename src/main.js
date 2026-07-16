@@ -42,6 +42,7 @@ scene.add(makeRibbon(track, -track.width / 2, track.width / 2, 0xf4f9ff, 0));
 scene.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, 0xdde7ee, 0.15));
 scene.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, 0xdde7ee, 0.15));
 scene.add(makeTrees(track));
+scene.add(makeRocks(track));
 scene.add(makeRamps(track));
 scene.add(makeGate(track, START_S, 0xd04040));
 scene.add(makeGate(track, FINISH_S, 0x3050c0));
@@ -259,6 +260,24 @@ function makeSkis() {
     group.add(ski);
   }
   group.position.set(0, -1.05, -0.35);
+  return group;
+}
+
+function makeRocks(track) {
+  const group = new THREE.Group();
+  const geometry = new THREE.IcosahedronGeometry(1, 0);
+  const material = new THREE.MeshLambertMaterial({ color: 0x8a9099, flatShading: true });
+  const rng = mulberry32(7);
+  for (const o of track.obstacles) {
+    if (o.type !== 'rock') continue;
+    const rock = new THREE.Mesh(geometry, material);
+    const w = track.toWorld(o.s, o.lat, 0);
+    const s = 0.7 + rng() * 0.4;
+    rock.scale.set(s * 1.3, s * 0.8, s * 1.1); // achatada, medio hundida en la nieve
+    rock.position.set(w.x, w.y + s * 0.35, w.z);
+    rock.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+    group.add(rock);
+  }
   return group;
 }
 

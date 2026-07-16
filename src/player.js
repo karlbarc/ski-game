@@ -86,7 +86,7 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
       st.height = 0.01;
       st.vy = Math.max(params.minJumpVy, st.speed * params.jumpLaunchFactor);
     }
-    if (o.type === 'tree' && !st.airborne
+    if ((o.type === 'tree' || o.type === 'rock') && !st.airborne
         && Math.abs(st.s - o.s) < 1.6 && Math.abs(st.lat - o.lat) < 1.2) {
       fall(st, halfWidth, params);
       return st;

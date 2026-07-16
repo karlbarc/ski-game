@@ -60,6 +60,15 @@ test('hitting a tree causes a fall: speed 0 and penalty timer', () => {
   assert.ok(st.fallTimer > 0);
 });
 
+test('hitting a rock causes a fall like a tree', () => {
+  const rock = track.obstacles.find((o) => o.type === 'rock');
+  assert.ok(rock, 'Verde should have rock obstacles');
+  let st = { ...createPlayerState(), s: rock.s - 5, lat: rock.lat, speed: 12 };
+  st = run(st, 0, 1);
+  assert.equal(st.fallen, true);
+  assert.equal(st.speed, 0);
+});
+
 test('going off-piste causes a fall and re-centers inside the track', () => {
   let st = { ...createPlayerState(), s: 100, lat: 0, speed: 12 };
   st = run(st, 1, 3);
