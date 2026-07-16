@@ -67,6 +67,7 @@ function loadTrack(data) {
   const center = track.toWorld(track.length / 2, 0, 0);
   worldGroup.add(makeSky(center), makeMountains(center), makeClouds(center));
   scene.add(worldGroup);
+  document.getElementById('track-name').textContent = `Pista ${data.name}`;
   window.__game.trackLength = track.length;
   restart();
 }
@@ -202,6 +203,7 @@ function finish() {
   if (recordEligible) saveBestSpeed(localStorage, track.data.name, maxKmh);
   const best = loadBest(localStorage, track.data.name);
   const bestSpeed = loadBestSpeed(localStorage, track.data.name);
+  document.getElementById('finish-track').textContent = `Pista ${track.data.name}`;
   hud.showFinish(
     `Tiempo: ${formatTime(time)}`,
     `Mejor: ${best == null ? '—' : formatTime(best)}`,

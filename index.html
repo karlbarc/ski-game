@@ -19,6 +19,8 @@
   .track-btn.selected { opacity: 1; border-color: #fff; }
   #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 0 16px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); font-size: 1.4rem; font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none; }
   #timer { display: flex; align-items: center; gap: 8px; height: 44px; font-weight: 700; background: rgba(10,30,50,.55); border-radius: 8px; padding: 0 14px; text-shadow: none; }
+  #center-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  #track-name { font-size: .85rem; font-weight: 700; background: rgba(10,30,50,.45); border-radius: 8px; padding: 2px 10px; text-shadow: none; }
   #speed-num { display: flex; align-items: baseline; gap: 4px; height: 44px; align-items: center; }
   #btn-pause { pointer-events: auto; background: rgba(10,30,50,.45); border: none; color: #fff; font-size: 1.2rem; border-radius: 8px; padding: 4px 16px; text-shadow: none; }
   #btn-pause:active { background: rgba(10,30,50,.7); }
@@ -33,7 +35,7 @@
 </style>
 </head>
 <body>
-<div id="hud"><div id="speed-group"><span id="speed-num"><span id="speed-value">0</span> km/h</span><div id="speed-bar" aria-label="Velocidad"><div id="speed-fill"></div></div></div><span id="timer">⏱ <span id="timer-text">00:00.00</span></span><button id="btn-pause" aria-label="Pausa">⏸</button></div>
+<div id="hud"><div id="speed-group"><span id="speed-num"><span id="speed-value">0</span> km/h</span><div id="speed-bar" aria-label="Velocidad"><div id="speed-fill"></div></div></div><div id="center-group"><span id="timer">⏱ <span id="timer-text">00:00.00</span></span><span id="track-name"></span></div><button id="btn-pause" aria-label="Pausa">⏸</button></div>
 <div id="message"></div>
 <div id="start-screen" class="overlay visible">
   <h1>⛷️ Ski</h1>
@@ -48,6 +50,7 @@
 </div>
 <div id="finish-screen" class="overlay">
   <h1>🏁 ¡Meta!</h1>
+  <p id="finish-track"></p>
   <p id="finish-time"></p>
   <p id="finish-best"></p>
   <p id="finish-speed"></p>
