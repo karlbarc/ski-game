@@ -2,13 +2,14 @@ export const PARAMS = {
   gravity: 9.8,
   friction: 0.25,      // rozamiento base de la nieve (m/s²)
   drag: 0.005,         // resistencia del aire (·v²)
-  carveBrake: 0.35,    // frenada extra por carving (·|sin(heading)|)
+  carveBrake: 2.5,     // frenada extra por carving (·|sin(heading)|)
   turnRate: 1.8,       // rad/s con steer a tope
-  maxHeading: 0.9,     // rad
+  maxHeading: 1.1,     // rad
   jumpLaunchFactor: 0.22,
   minJumpVy: 2.5,
   fallPenalty: 3.0,    // segundos parado tras caerse
   maxSpeed: 45,
+  crawlSpeed: 1.5,      // por debajo de esto, el freno de carving se desactiva (evita soft-lock)
 };
 
 export function createPlayerState() {
@@ -48,10 +49,13 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
     st.heading += steer * params.turnRate * dt;
     st.heading = Math.max(-params.maxHeading, Math.min(params.maxHeading, st.heading));
     const slope = -frame.tan.y; // seno de la pendiente, positivo cuesta abajo
+    const carveBrake = st.speed > params.crawlSpeed
+      ? params.carveBrake * Math.abs(Math.sin(st.heading))
+      : 0;
     const accel = params.gravity * slope * Math.cos(st.heading)
       - params.friction
       - params.drag * st.speed * st.speed
-      - params.carveBrake * Math.abs(Math.sin(st.heading));
+      - carveBrake;
     st.speed = Math.max(0, Math.min(params.maxSpeed, st.speed + accel * dt));
   } else {
     st.height += st.vy * dt;

@@ -72,3 +72,14 @@ test('the player lands after a jump', () => {
   assert.equal(st.airborne, false);
   assert.equal(st.height, 0);
 });
+
+test('holding a full turn never soft-locks the player at zero speed', () => {
+  // Shallowest part of the track (near the finish): hold full lock from standstill.
+  let st = { ...createPlayerState(), s: track.length - 25, lat: 0, speed: 0 };
+  const dt = 1 / 60;
+  for (let t = 0; t < 6; t += dt) {
+    st = stepPlayer(st, 1, dt, track);
+    if (st.fallen) { st = { ...st, fallen: false, fallTimer: 0 }; } // ignore off-piste falls; we only care about forward motion
+  }
+  assert.ok(st.speed > 0.3, `speed=${st.speed} — player stalled while holding full lock`);
+});
