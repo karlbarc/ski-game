@@ -1,4 +1,11 @@
-# Assets de audio
+# Assets
+
+## Fuentes
+
+- `fonts/titan-one.woff2` — fuente "Titan One" de **Rodrigo Fuenzalida**,
+  licencia **SIL Open Font License 1.1**: https://fonts.google.com/specimen/Titan+One
+
+## Audio
 
 - `ouch1.wav`, `ouch2.wav`, `ouch3.wav` — quejidos de dolor recortados de
   "grunts of male death and pain" de **thebardofblasphemy**, licencia **CC0**
