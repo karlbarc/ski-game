@@ -1,4 +1,4 @@
-# Ski Verde ⛷️
+# Downhill Ski Challenge ⛷️
 
 Juego de ski en primera persona para navegador (móvil y escritorio).
 Baja la pista en el menor tiempo posible sin caerte.
