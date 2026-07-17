@@ -34,7 +34,8 @@
   #btn-back-controls { background: none; font-size: 1.35rem; opacity: .8; padding: 8px; }
   #hud { position: fixed; top: 12px; left: 0; right: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 12px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); font-size: 1.35rem; font-variant-numeric: tabular-nums; z-index: 5; pointer-events: none; }
   #timer { display: flex; align-items: center; gap: 8px; height: 44px; font-size: 1.5rem; font-weight: 700; background: rgb(62 105 154 / 88%); border-radius: 8px; padding: 0 14px; text-shadow: none; }
-  .hud-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+  .hud-row { display: flex; justify-content: space-between; align-items: center; width: 100%; position: relative; }
+  .hud-row > :nth-child(2) { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   #track-name { font-size: 1.35rem; font-weight: 700; background: rgb(62 105 154 / 88%); border-radius: 8px; padding: 2px 10px; text-shadow: none; }
   #speed-num { display: flex; align-items: baseline; gap: 4px; height: 44px; align-items: center; }
   #btn-pause { pointer-events: auto; background: rgb(62 105 154 / 88%); border: none; color: #fff; font-size: 1.5rem; border-radius: 8px; padding: 4px 16px; text-shadow: none; }
