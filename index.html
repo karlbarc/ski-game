@@ -13,13 +13,14 @@
   .overlay.visible { display: flex; }
   .overlay h1 { font-size: 2.05rem; font-family: 'Titan One', system-ui, sans-serif; font-weight: 400; letter-spacing: .5px; }
   #game-logo { font-size: 2.6rem; line-height: 1.1; }
-  #game-logo span { display: block; background: linear-gradient(180deg, #ffffff 30%, #9fd0f7 75%, #5fa8e8); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; filter: drop-shadow(0 3px 0 rgba(8, 24, 44, .85)); }
+  .logo-emoji { display: block; font-size: 3.8rem; margin-bottom: 4px; }
+  #game-logo .logo-text { display: block; background: linear-gradient(180deg, #ffffff 30%, #9fd0f7 75%, #5fa8e8); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; filter: drop-shadow(0 3px 0 rgba(8, 24, 44, .85)); }
   .overlay p { font-size: 1.35rem; }
   #start-screen p { background: rgba(10, 30, 50, .6); border-radius: 10px; padding: 6px 16px; }
   .overlay button { font-size: 1.45rem; padding: 14px 36px; border: none; border-radius: 10px; background: #2f80d0; color: #fff; }
   .overlay button:active { background: #1f5f9f; }
   .screen-hint { font-size: 1.35rem; font-weight: 700; margin-top: 8px; }
-  #start-screen button { background: rgb(62 105 154 / 92%); box-shadow: 0 6px 16px rgba(0, 0, 0, .4); }
+  #start-screen button { background: rgb(62 105 154 / 92%); box-shadow: 0 6px 16px rgba(0, 0, 0, .4); width: min(88vw, 380px); }
   #start-screen button:active { background: rgb(82 130 182 / 95%); }
   .overlay button small { display: block; font-size: 1.35rem; font-weight: 400; opacity: .85; margin-top: 2px; }
   #track-list { display: flex; flex-direction: column; gap: 12px; width: min(92vw, 420px); max-height: 62vh; overflow-y: auto; }
@@ -56,7 +57,7 @@
 <div id="hud"><div id="speed-group"><span id="speed-num"><span id="speed-value">0</span> km/h</span><div id="speed-bar" aria-label="Velocidad"><div id="speed-fill"></div></div></div><div id="center-group"><span id="timer">⏱ <span id="timer-text">00:00.00</span></span><span id="track-name"></span></div><button id="btn-pause" aria-label="Pausa">⏸</button></div>
 <div id="message"></div>
 <div id="start-screen" class="overlay visible">
-  <h1 id="game-logo">⛷️<span>Downhill Ski Challenge</span></h1>
+  <h1 id="game-logo"><span class="logo-emoji">⛷️</span><span class="logo-text">Downhill Ski Challenge</span></h1>
   <p>Baja lo más rápido posible sin caerte.</p>
   <p class="screen-hint">Elige cómo controlar tus skies</p>
   <button id="btn-touch">👆 Táctil<small>mantén pulsado un lado de la pantalla</small></button>
