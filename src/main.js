@@ -142,7 +142,7 @@ function buildTrackMenu() {
       <span>
         <span class="track-title">${data.name}<small>${data.difficulty}</small></span>
         <span class="track-stats">${m.length} m · ${m.slope}% pendiente · ${m.obstacles} obstáculos · ${m.jumps} saltos</span>
-        ${best == null ? '' : `<span class="track-best">Mejor: ${formatTime(best)}</span>`}
+        ${best == null ? '' : `<span class="track-best">Mejor tiempo: ${formatTime(best)}</span>`}
       </span>`;
     card.addEventListener('click', () => startRun(key));
     list.appendChild(card);
