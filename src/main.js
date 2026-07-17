@@ -320,6 +320,7 @@ function tick(now) {
   snow.update(gliding ? player.speed : 0, steerSmooth, gliding);
   hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(race.elapsed));
   hud.setSpeed((player.fallen ? crashSpeed : player.speed) * 3.6);
+  hud.setProgress(player.s, track.length);
   renderer.render(scene, camera);
 }
 requestAnimationFrame(tick);

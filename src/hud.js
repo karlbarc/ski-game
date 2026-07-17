@@ -3,6 +3,9 @@ export function createHud(doc = document) {
   let msgTimer = 0;
   return {
     setTimer(text) { el('timer-text').textContent = text; },
+    setProgress(s, total) {
+      el('progress').textContent = `${Math.round(Math.min(Math.max(s, 0), total))} m`;
+    },
     setSpeed(kmh) {
       const pct = Math.min(100, (kmh / 120) * 100); // ~115 km/h es la punta real del juego
       el('speed-fill').style.width = `${pct}%`;
