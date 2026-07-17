@@ -130,7 +130,8 @@ test('the ramp raises the player before takeoff instead of clipping through', ()
 test('takeoff happens at the lip with ramp height', () => {
   const jump = track.obstacles.find((o) => o.type === 'jump');
   let st = { ...createPlayerState(), s: jump.s - 8, lat: jump.lat, speed: 12 };
-  st = run(st, 0, 1.2);
+  const dt = 1 / 60;
+  for (let t = 0; t < 1.5 && !st.airborne; t += dt) st = stepPlayer(st, 0, dt, track);
   assert.equal(st.airborne, true);
   assert.ok(st.height >= 1, `height=${st.height} — should launch from the top of the ramp`);
 });

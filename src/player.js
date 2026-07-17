@@ -5,8 +5,8 @@ export const PARAMS = {
   carveBrake: 2.5,     // frenada extra por carving (·|sin(heading)|)
   turnRate: 1.0,       // rad/s con steer a tope
   maxHeading: 1.1,     // rad
-  jumpLaunchFactor: 0.22,
-  minJumpVy: 2.5,
+  jumpLaunchFactor: 0.12,
+  minJumpVy: 2.0,
   rampLength: 6,       // la rampa sube desde o.s - rampLength hasta el labio en o.s
   rampHeight: 1.3,
   rampHalfWidth: 3.5,
