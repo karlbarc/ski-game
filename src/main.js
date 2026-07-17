@@ -86,8 +86,12 @@ const hud = createHud();
 const controls = createControls();
 const snow = createSnowSound();
 
-document.getElementById('btn-touch').addEventListener('click', () => startGame('touch'));
-document.getElementById('btn-gyro').addEventListener('click', () => startGame('gyro'));
+document.getElementById('btn-touch').addEventListener('click', () => chooseControl('touch'));
+document.getElementById('btn-gyro').addEventListener('click', () => chooseControl('gyro'));
+document.getElementById('btn-back-controls').addEventListener('click', () => {
+  document.getElementById('track-screen').classList.remove('visible');
+  document.getElementById('start-screen').classList.add('visible');
+});
 document.getElementById('btn-restart').addEventListener('click', restart);
 document.getElementById('btn-pause').addEventListener('click', pauseGame);
 document.getElementById('btn-resume').addEventListener('click', resumeGame);
@@ -97,23 +101,71 @@ document.getElementById('btn-restart-fall').addEventListener('click', restart);
 function goToMenu() {
   restart(); // resetea carrera y oculta overlays de meta/caída/pausa
   started = false;
-  document.getElementById('start-screen').classList.add('visible');
+  buildTrackMenu(); // refresca los mejores tiempos en las tarjetas
+  document.getElementById('track-screen').classList.add('visible');
 }
 document.getElementById('btn-menu').addEventListener('click', goToMenu);
 document.getElementById('btn-menu-fall').addEventListener('click', goToMenu);
 document.getElementById('btn-menu-pause').addEventListener('click', goToMenu);
 
-// Selector de pista en el menú de inicio (o ?track=azul para e2e)
 let selectedTrack = TRACKS[query.get('track')] ? query.get('track') : 'verde';
-for (const btn of document.querySelectorAll('.track-btn')) {
-  btn.classList.toggle('selected', btn.dataset.track === selectedTrack);
-  btn.addEventListener('click', () => {
-    selectedTrack = btn.dataset.track;
-    for (const b of document.querySelectorAll('.track-btn')) {
-      b.classList.toggle('selected', b.dataset.track === selectedTrack);
-    }
-    loadTrack(TRACKS[selectedTrack]);
+
+// Metadatos por pista para las tarjetas del menú (calculados una vez).
+const TRACK_INFO = {};
+function trackMeta(key) {
+  if (!TRACK_INFO[key]) {
+    const data = TRACKS[key];
+    const built = buildTrack(data);
+    const drop = data.controlPoints[0][1] - data.controlPoints.at(-1)[1];
+    TRACK_INFO[key] = {
+      length: Math.round(built.length),
+      slope: Math.round((drop / built.length) * 100),
+      obstacles: data.obstacles.filter((o) => o.type !== 'jump').length,
+      jumps: data.obstacles.filter((o) => o.type === 'jump').length,
+    };
+  }
+  return TRACK_INFO[key];
+}
+
+function buildTrackMenu() {
+  const list = document.getElementById('track-list');
+  list.innerHTML = '';
+  for (const [key, data] of Object.entries(TRACKS)) {
+    const m = trackMeta(key);
+    const best = loadBest(localStorage, data.name);
+    const card = document.createElement('button');
+    card.className = 'track-card';
+    card.dataset.track = key;
+    card.style.setProperty('--accent', data.accent);
+    card.innerHTML = `
+      <span class="track-emoji">${data.emoji}</span>
+      <span>
+        <span class="track-title">${data.name}<small>${data.difficulty}</small></span>
+        <span class="track-stats">${m.length} m · ${m.slope}% pendiente · ${m.obstacles} obstáculos · ${m.jumps} saltos</span>
+        ${best == null ? '' : `<span class="track-best">Mejor: ${formatTime(best)}</span>`}
+      </span>`;
+    card.addEventListener('click', () => startRun(key));
+    list.appendChild(card);
+  }
+}
+
+// Paso 1: elegir control (aquí se pide el permiso del giroscopio, dentro del gesto).
+function chooseControl(mode) {
+  snow.start();
+  controls.setMode(mode).then((ok) => {
+    if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
   });
+  hud.hideStart();
+  buildTrackMenu();
+  document.getElementById('track-screen').classList.add('visible');
+}
+
+// Paso 2: elegir pista y bajar.
+function startRun(key) {
+  selectedTrack = key;
+  document.getElementById('track-screen').classList.remove('visible');
+  loadTrack(TRACKS[key]);
+  started = true;
 }
 
 window.addEventListener('keydown', (e) => {
@@ -127,15 +179,6 @@ window.addEventListener('keydown', (e) => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) pauseGame();
 });
-
-function startGame(mode) {
-  snow.start(); // dentro del gesto del usuario, requisito de iOS
-  controls.setMode(mode).then((ok) => {
-    if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
-    hud.hideStart();
-    started = true;
-  });
-}
 
 function restart() {
   player = createPlayerState();
@@ -289,6 +332,13 @@ window.addEventListener('resize', () => {
 
 window.__game = { state: () => ({ player, race, paused }), trackLength: 0 };
 loadTrack(TRACKS[selectedTrack]);
+
+// Los runs de verificación (autopilot) saltan los menús y arrancan directos.
+if (AUTOPILOT) {
+  controls.setMode('touch');
+  hud.hideStart();
+  started = true;
+}
 
 // ---------- construcción de la escena ----------
 

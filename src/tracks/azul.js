@@ -2,6 +2,9 @@
 // obstáculos densos (algunos cerca del eje que obligan a zigzaguear) y 3 saltos.
 export const azul = {
   name: 'Azul',
+  emoji: '🔵',
+  difficulty: 'Media',
+  accent: '#2f80d0',
   width: 13,
   controlPoints: [
     [0, 0, 0],

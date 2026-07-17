@@ -1,6 +1,9 @@
 // Pista Verde (fácil): ~780 m, eses amplias, 2 saltos, árboles sueltos dentro de la pista.
 export const verde = {
   name: 'Verde',
+  emoji: '🟢',
+  difficulty: 'Fácil',
+  accent: '#3fae62',
   width: 16,
   controlPoints: [
     [0, 0, 0],

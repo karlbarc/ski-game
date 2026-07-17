@@ -2,6 +2,9 @@
 // encadenadas, obstáculos muy densos (varios en pleno centro) y 4 saltos.
 export const negra = {
   name: 'Negra',
+  emoji: '⚫',
+  difficulty: 'Difícil',
+  accent: '#8a94a3',
   width: 9,
   controlPoints: [
     [0, 0, 0],
