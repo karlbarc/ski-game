@@ -102,6 +102,7 @@ function goToMenu() {
   restart(); // resetea carrera y oculta overlays de meta/caída/pausa
   started = false;
   buildTrackMenu(); // refresca los mejores tiempos en las tarjetas
+  document.getElementById('hud').classList.add('hidden');
   document.getElementById('track-screen').classList.add('visible');
 }
 document.getElementById('btn-menu').addEventListener('click', goToMenu);
@@ -164,6 +165,7 @@ function chooseControl(mode) {
 function startRun(key) {
   selectedTrack = key;
   document.getElementById('track-screen').classList.remove('visible');
+  document.getElementById('hud').classList.remove('hidden');
   loadTrack(TRACKS[key]);
   started = true;
 }
@@ -341,6 +343,7 @@ loadTrack(TRACKS[selectedTrack]);
 if (AUTOPILOT) {
   controls.setMode('touch');
   hud.hideStart();
+  document.getElementById('hud').classList.remove('hidden');
   started = true;
 }
 
