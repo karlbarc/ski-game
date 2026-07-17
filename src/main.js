@@ -276,6 +276,9 @@ function updateCamera() {
   skis.rotation.z = steerSmooth * 0.35;   // canteo al girar
   skis.rotation.y = steerSmooth * 0.12;   // las puntas apuntan hacia el giro
   skis.rotation.x = player.airborne ? 0.15 : 0;
+  // El FOV se abre con la velocidad y estira la perspectiva de lo cercano:
+  // compensamos la profundidad de los skis para que no parezcan alargarse.
+  skis.scale.z = Math.tan(THREE.MathUtils.degToRad(35)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
 }
 
 let last = performance.now();
