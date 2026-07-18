@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { buildTrack, mulberry32 } from './track.js?v=1784378895';
-import { verde } from './tracks/verde.js?v=1784378895';
-import { azul } from './tracks/azul.js?v=1784378895';
-import { negra } from './tracks/negra.js?v=1784378895';
-import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=1784378895';
+import { buildTrack, mulberry32 } from './track.js?v=1784379432';
+import { verde } from './tracks/verde.js?v=1784379432';
+import { azul } from './tracks/azul.js?v=1784379432';
+import { negra } from './tracks/negra.js?v=1784379432';
+import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=1784379432';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
-} from './race.js?v=1784378895';
-import { createControls } from './controls.js?v=1784378895';
-import { createHud } from './hud.js?v=1784378895';
-import { createSnowSound } from './audio.js?v=1784378895';
+} from './race.js?v=1784379432';
+import { createControls } from './controls.js?v=1784379432';
+import { createHud } from './hud.js?v=1784379432';
+import { createSnowSound } from './audio.js?v=1784379432';
 
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
