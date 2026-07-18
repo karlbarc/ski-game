@@ -82,8 +82,24 @@ export function createSnowSound() {
     src.start();
   }
 
+  let lastResumeTry = 0;
+
   function resume() {
-    if (ctx && ctx.state !== 'running') ctx.resume();
+    if (!ctx || ctx.state === 'running') return;
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    } catch { /* API no disponible */ }
+    ctx.resume().catch(() => { /* fuera de gesto: se reintentará */ });
+  }
+
+  // Reintento pasivo: iOS puede rechazar resume() fuera de un gesto; desde el
+  // bucle del juego insistimos (con throttle) mientras la app esté visible.
+  function nudgeResume() {
+    if (!ctx || ctx.state === 'running' || document.hidden) return;
+    const now = performance.now();
+    if (now - lastResumeTry < 500) return;
+    lastResumeTry = now;
+    resume();
   }
 
   return {
@@ -107,7 +123,10 @@ export function createSnowSound() {
             resume();
           }
         });
-        window.addEventListener('touchend', resume);
+        // Cualquier gesto reactiva el audio (iOS exige gesto para resume()).
+        for (const ev of ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown']) {
+          window.addEventListener(ev, resume, { passive: true });
+        }
       }
     },
     // Silencio global (música + efectos). Persiste el flag aunque el ctx no exista aún.
@@ -133,6 +152,7 @@ export function createSnowSound() {
     // speed en m/s; steer en [-1,1]; grounded=false silencia (aire/caída/pausa).
     update(speed, steer, grounded) {
       if (!gain) return;
+      nudgeResume();
       const glide = Math.min(1, speed / 25);
       const target = grounded ? glide * (0.22 + 0.25 * Math.abs(steer)) : 0;
       gain.gain.setTargetAtTime(target, ctx.currentTime, 0.08);

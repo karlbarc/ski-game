@@ -224,7 +224,8 @@ function restart() {
 }
 
 function pauseGame() {
-  if (!started || paused || race.status === 'finished') return;
+  // Estando caído no hay nada que pausar (crono detenido y overlay propio).
+  if (!started || paused || player.fallen || race.status === 'finished') return;
   paused = true;
   race = pauseRace(race, performance.now());
   document.getElementById('pause-screen').classList.add('visible');
