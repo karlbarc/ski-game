@@ -18,6 +18,7 @@ export function createSnowSound() {
   }
 
   let assetsRequested = false;
+  let lifecycleHooked = false;
 
   function loadAssets() {
     if (assetsRequested) return;
@@ -90,11 +91,19 @@ export function createSnowSound() {
       ensure();
       resume();
       if (ctx && !ouchBuffers.length) loadAssets();
-      // iOS suspende el contexto al cambiar de app; lo reactivamos al volver o al tocar.
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) resume();
-      });
-      window.addEventListener('touchend', resume);
+      if (!lifecycleHooked) {
+        lifecycleHooked = true;
+        // Al cambiar de app se silencia TODO (la sesión 'playback' seguiría
+        // sonando en segundo plano si no); al volver, se reanuda.
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            if (ctx) ctx.suspend();
+          } else {
+            resume();
+          }
+        });
+        window.addEventListener('touchend', resume);
+      }
     },
     // Música de menú en bucle (con fundido de entrada). Llamar tras un gesto.
     playMenu() {
