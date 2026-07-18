@@ -96,7 +96,6 @@ document.getElementById('btn-restart').addEventListener('click', restart);
 document.getElementById('btn-pause').addEventListener('click', pauseGame);
 document.getElementById('btn-resume').addEventListener('click', resumeGame);
 document.getElementById('btn-restart-pause').addEventListener('click', restart);
-document.getElementById('btn-continue').addEventListener('click', standUp);
 document.getElementById('btn-restart-fall').addEventListener('click', restart);
 function goToMenu() {
   restart(); // resetea carrera y oculta overlays de meta/caída/pausa
@@ -224,14 +223,6 @@ function restart() {
   document.getElementById('fall-screen').classList.remove('visible');
 }
 
-function standUp() {
-  if (!player.fallen) return;
-  player = recoverPlayer(player);
-  race = resumeRace(race, performance.now()); // el crono vuelve a correr
-  crashSpeed = 0;
-  document.getElementById('fall-screen').classList.remove('visible');
-}
-
 function pauseGame() {
   if (!started || paused || race.status === 'finished') return;
   paused = true;
@@ -331,7 +322,9 @@ function tick(now) {
         player = recoverPlayer(player); // los runs de verificación se levantan solos
       } else {
         crashSpeed = prev.speed; // el marcador congela la velocidad del impacto
-        race = pauseRace(race, now); // el crono se detiene mientras estás caído
+        race = pauseRace(race, now);
+        document.getElementById('fall-meters').textContent =
+          `Avanzaste ${Math.round(Math.min(player.s, track.length))} m de ${Math.round(track.length)} m`;
         document.getElementById('fall-screen').classList.add('visible');
       }
     }

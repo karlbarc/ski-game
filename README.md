@@ -21,8 +21,8 @@ Abre http://localhost:8173 (en el móvil: usa la IP local de tu máquina).
 - **Giroscopio:** inclina el teléfono (requiere aceptar el permiso en iOS).
 - **Teclado:** flechas ← →.
 
-Chocar con un árbol, una roca o salirte de la pista te tira al suelo: el crono
-sigue corriendo hasta que pulses **Continuar** (o **Volver a empezar**).
+Chocar con un árbol, una roca o salirte de la pista termina el intento: se
+muestran los metros que avanzaste y toca **Volver a empezar**.
 El mejor tiempo y la velocidad máxima se guardan en el navegador.
 
 ## Desarrollo
