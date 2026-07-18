@@ -38,6 +38,10 @@
   .hud-row > :nth-child(2) { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
   #track-name { font-size: 1.35rem; font-weight: 700; background: rgb(62 105 154 / 88%); border-radius: 8px; padding: 2px 10px; text-shadow: none; }
   #speed-num { display: flex; align-items: baseline; gap: 4px; height: 44px; align-items: center; }
+  #hud-buttons { display: flex; gap: 8px; }
+  #btn-mute { pointer-events: auto; background: rgb(62 105 154 / 88%); border: none; font-size: 1.5rem; border-radius: 8px; padding: 4px 12px; }
+  #btn-mute-menu { position: fixed; top: 12px; right: 12px; z-index: 20; background: rgb(62 105 154 / 92%); border: none; font-size: 1.5rem; border-radius: 8px; padding: 6px 12px; box-shadow: 0 4px 10px rgba(0, 0, 0, .35); }
+  #hud:not(.hidden) ~ #btn-mute-menu { display: none; }
   #btn-pause { pointer-events: auto; background: rgb(62 105 154 / 88%); border: none; color: #fff; font-size: 1.5rem; border-radius: 8px; padding: 4px 16px; text-shadow: none; }
   #btn-pause:active { background: rgb(82 130 182 / 95%); }
   #progress { white-space: nowrap; display: flex; align-items: center; height: 44px; font-size: 1.5rem; font-weight: 700; background: rgb(62 105 154 / 88%); border-radius: 8px; padding: 2px 10px; text-shadow: none; }
@@ -56,9 +60,10 @@
 </head>
 <body>
 <div id="hud" class="hidden">
-  <div class="hud-row"><div id="speed-bar" aria-label="Velocidad"><div id="speed-fill"></div></div><span id="track-name"></span><button id="btn-pause" aria-label="Pausa">⏸</button></div>
+  <div class="hud-row"><div id="speed-bar" aria-label="Velocidad"><div id="speed-fill"></div></div><span id="track-name"></span><div id="hud-buttons"><button id="btn-mute" aria-label="Sonido">🔊</button><button id="btn-pause" aria-label="Pausa">⏸</button></div></div>
   <div class="hud-row"><span id="speed-num"><span id="speed-value">0</span> km/h</span><span id="timer">⏱ <span id="timer-text">00:00.00</span></span><span id="progress">0 m</span></div>
 </div>
+<button id="btn-mute-menu" aria-label="Sonido">🔊</button>
 <div id="message"></div>
 <div id="start-screen" class="overlay visible">
   <h1 id="game-logo"><span class="logo-text">Downhill Ski Challenge</span><span class="logo-emoji">⛷️</span></h1>

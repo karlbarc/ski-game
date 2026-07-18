@@ -3,6 +3,8 @@
 // y el carving añade "raspado". Debe arrancarse desde un gesto del usuario (iOS).
 export function createSnowSound() {
   let ctx = null;
+  let master = null; // volumen maestro: todo el audio pasa por aquí (mute global)
+  let muted = false;
   let gain = null;
   let filter = null;
   let ouchBuffers = []; // quejidos reales (assets/ouch*.wav, CC0)
@@ -49,7 +51,7 @@ export function createSnowSound() {
     musicGain.gain.setValueAtTime(0, ctx.currentTime);
     musicGain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 0.8);
     musicSrc.connect(musicGain);
-    musicGain.connect(ctx.destination);
+    musicGain.connect(master);
     musicSrc.start();
   }
 
@@ -58,6 +60,9 @@ export function createSnowSound() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = muted ? 0 : 1;
+    master.connect(ctx.destination);
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -73,7 +78,7 @@ export function createSnowSound() {
     gain.gain.value = 0;
     src.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(master);
     src.start();
   }
 
@@ -104,6 +109,11 @@ export function createSnowSound() {
         });
         window.addEventListener('touchend', resume);
       }
+    },
+    // Silencio global (música + efectos). Persiste el flag aunque el ctx no exista aún.
+    setMuted(m) {
+      muted = m;
+      if (master) master.gain.value = m ? 0 : 1;
     },
     // Música de menú en bucle (con fundido de entrada). Llamar tras un gesto.
     playMenu() {
@@ -139,7 +149,7 @@ export function createSnowSound() {
         const g = ctx.createGain();
         g.gain.value = 0.8;
         src.connect(g);
-        g.connect(ctx.destination);
+        g.connect(master);
         src.start(t0);
         return;
       }
@@ -157,7 +167,7 @@ export function createSnowSound() {
       thudGain.gain.value = 0.9;
       thud.connect(thudFilter);
       thudFilter.connect(thudGain);
-      thudGain.connect(ctx.destination);
+      thudGain.connect(master);
       thud.start(t0);
       // gemido: tono que cae, con voz "amortiguada" por un paso bajo
       const osc = ctx.createOscillator();
@@ -173,7 +183,7 @@ export function createSnowSound() {
       og.gain.setTargetAtTime(0, t0 + 0.32, 0.12);
       osc.connect(voice);
       voice.connect(og);
-      og.connect(ctx.destination);
+      og.connect(master);
       osc.start(t0 + 0.04);
       osc.stop(t0 + 0.7);
     },
@@ -187,7 +197,7 @@ export function createSnowSound() {
         const g = ctx.createGain();
         g.gain.value = 0.75;
         src.connect(g);
-        g.connect(ctx.destination);
+        g.connect(master);
         src.start(t0);
         return;
       }
@@ -215,7 +225,7 @@ export function createSnowSound() {
       clapGain.gain.setTargetAtTime(0, t0 + dur - 0.6, 0.25);
       claps.connect(clapFilter);
       clapFilter.connect(clapGain);
-      clapGain.connect(ctx.destination);
+      clapGain.connect(master);
       claps.start(t0);
 
       for (let v = 0; v < 3; v++) {
@@ -232,7 +242,7 @@ export function createSnowSound() {
         osc.frequency.setValueAtTime(base * 1.8, start + 0.3); // "hoo": cae
         osc.frequency.exponentialRampToValueAtTime(base * 0.9, start + 0.6);
         osc.connect(og);
-        og.connect(ctx.destination);
+        og.connect(master);
         osc.start(start);
         osc.stop(start + 0.9);
       }

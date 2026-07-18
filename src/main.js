@@ -108,6 +108,24 @@ function goToMenu() {
 }
 document.getElementById('btn-menu').addEventListener('click', goToMenu);
 
+// Mute global (música + efectos), persistente entre sesiones.
+let soundMuted = localStorage.getItem('ski-muted') === '1';
+snow.setMuted(soundMuted);
+function updateMuteIcons() {
+  const icon = soundMuted ? '🔇' : '🔊';
+  document.getElementById('btn-mute').textContent = icon;
+  document.getElementById('btn-mute-menu').textContent = icon;
+}
+function toggleMute() {
+  soundMuted = !soundMuted;
+  localStorage.setItem('ski-muted', soundMuted ? '1' : '0');
+  snow.setMuted(soundMuted);
+  updateMuteIcons();
+}
+document.getElementById('btn-mute').addEventListener('click', toggleMute);
+document.getElementById('btn-mute-menu').addEventListener('click', toggleMute);
+updateMuteIcons();
+
 // La música solo puede arrancar tras un gesto: el primer toque en el menú la enciende.
 document.addEventListener('pointerdown', () => {
   if (!started) {
