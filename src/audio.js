@@ -5,6 +5,11 @@ export function createSnowSound() {
   let ctx = null;
   let master = null; // volumen maestro: todo el audio pasa por aquí (mute global)
   let muted = false;
+  let bgHidden = false; // silencio mientras la app está en segundo plano
+
+  function applyMasterGain() {
+    if (master) master.gain.value = (muted || bgHidden) ? 0 : 1;
+  }
   let gain = null;
   let filter = null;
   let ouchBuffers = []; // quejidos reales (assets/ouch*.wav, CC0)
@@ -61,7 +66,7 @@ export function createSnowSound() {
     if (!AC) return;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : 1;
+    master.gain.value = (muted || bgHidden) ? 0 : 1;
     master.connect(ctx.destination);
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -117,11 +122,9 @@ export function createSnowSound() {
         // Al cambiar de app se silencia TODO (la sesión 'playback' seguiría
         // sonando en segundo plano si no); al volver, se reanuda.
         document.addEventListener('visibilitychange', () => {
-          if (document.hidden) {
-            if (ctx) ctx.suspend();
-          } else {
-            resume();
-          }
+          bgHidden = document.hidden;
+          applyMasterGain();
+          if (!document.hidden) resume();
         });
         // Cualquier gesto reactiva el audio (iOS exige gesto para resume()).
         for (const ev of ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown']) {
@@ -132,7 +135,7 @@ export function createSnowSound() {
     // Silencio global (música + efectos). Persiste el flag aunque el ctx no exista aún.
     setMuted(m) {
       muted = m;
-      if (master) master.gain.value = m ? 0 : 1;
+      applyMasterGain();
     },
     // Música de menú en bucle (con fundido de entrada). Llamar tras un gesto.
     playMenu() {
