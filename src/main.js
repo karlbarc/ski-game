@@ -104,8 +104,17 @@ function goToMenu() {
   buildTrackMenu(); // refresca los mejores tiempos en las tarjetas
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('track-screen').classList.add('visible');
+  snow.playMenu();
 }
 document.getElementById('btn-menu').addEventListener('click', goToMenu);
+
+// La música solo puede arrancar tras un gesto: el primer toque en el menú la enciende.
+document.addEventListener('pointerdown', () => {
+  if (!started) {
+    snow.start();
+    snow.playMenu();
+  }
+}, { once: true });
 document.getElementById('btn-menu-fall').addEventListener('click', goToMenu);
 document.getElementById('btn-menu-pause').addEventListener('click', goToMenu);
 
@@ -153,6 +162,7 @@ function buildTrackMenu() {
 // Paso 1: elegir control (aquí se pide el permiso del giroscopio, dentro del gesto).
 function chooseControl(mode) {
   snow.start();
+  snow.playMenu();
   controls.setMode(mode).then((ok) => {
     if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
   });
@@ -166,6 +176,7 @@ function startRun(key) {
   selectedTrack = key;
   document.getElementById('track-screen').classList.remove('visible');
   document.getElementById('hud').classList.remove('hidden');
+  snow.stopMenu();
   loadTrack(TRACKS[key]);
   started = true;
 }

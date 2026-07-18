@@ -7,19 +7,49 @@ export function createSnowSound() {
   let filter = null;
   let ouchBuffers = []; // quejidos reales (assets/ouch*.wav, CC0)
   let cheerBuffer = null; // ovación real (assets/cheer.wav, CC-BY Gregor Quendel)
+  let musicBuffer = null; // música de menú (assets/menu-music.m4a, CC0 Nostromo)
+  let musicSrc = null;
+  let musicGain = null;
+  let musicWanted = false;
 
   async function loadBuffer(file) {
     const res = await fetch(file);
     return ctx.decodeAudioData(await res.arrayBuffer());
   }
 
+  let assetsRequested = false;
+
   function loadAssets() {
+    if (assetsRequested) return;
+    assetsRequested = true;
     Promise.all(['assets/ouch1.wav', 'assets/ouch2.wav', 'assets/ouch3.wav'].map(loadBuffer))
       .then((buffers) => { ouchBuffers = buffers; })
       .catch(() => { /* sin assets: queda el quejido sintetizado */ });
     loadBuffer('assets/cheer.wav')
       .then((buffer) => { cheerBuffer = buffer; })
       .catch(() => { /* sin asset: queda la ovación sintetizada */ });
+    loadBuffer('assets/menu-music.m4a')
+      .then((buffer) => {
+        musicBuffer = buffer;
+        if (musicWanted) startMusic();
+      })
+      .catch(() => { /* sin música: el menú queda en silencio */ });
+  }
+
+  function startMusic() {
+    if (!ctx || !musicBuffer || musicSrc) return;
+    musicSrc = ctx.createBufferSource();
+    musicSrc.buffer = musicBuffer;
+    musicSrc.loop = true;
+    // recorta el "priming" del códec para que el bucle no haga gap
+    musicSrc.loopStart = 0.05;
+    musicSrc.loopEnd = musicBuffer.duration - 0.05;
+    musicGain = ctx.createGain();
+    musicGain.gain.setValueAtTime(0, ctx.currentTime);
+    musicGain.gain.linearRampToValueAtTime(0.35, ctx.currentTime + 0.8);
+    musicSrc.connect(musicGain);
+    musicGain.connect(ctx.destination);
+    musicSrc.start();
   }
 
   function ensure() {
@@ -65,6 +95,21 @@ export function createSnowSound() {
         if (!document.hidden) resume();
       });
       window.addEventListener('touchend', resume);
+    },
+    // Música de menú en bucle (con fundido de entrada). Llamar tras un gesto.
+    playMenu() {
+      musicWanted = true;
+      startMusic(); // si el buffer aún no cargó, arrancará al terminar la carga
+    },
+    stopMenu() {
+      musicWanted = false;
+      if (!musicSrc) return;
+      const src = musicSrc;
+      const g = musicGain;
+      musicSrc = null;
+      musicGain = null;
+      g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+      src.stop(ctx.currentTime + 0.6);
     },
     // speed en m/s; steer en [-1,1]; grounded=false silencia (aire/caída/pausa).
     update(speed, steer, grounded) {
