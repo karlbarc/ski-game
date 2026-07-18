@@ -94,6 +94,18 @@ test('rocks have a tighter hitbox than trees (passing 1 m beside is safe)', () =
   assert.equal(st2.fallen, true, '1 m beside a tree still hits its wider canopy');
 });
 
+test('flying into a tree still crashes; flying over a rock is safe', () => {
+  const tree = track.obstacles.find((o) => o.type === 'tree');
+  let st = { ...createPlayerState(), s: tree.s - 5, lat: tree.lat, speed: 14, airborne: true, height: 1.2, vy: 1 };
+  st = run(st, 0, 1);
+  assert.equal(st.fallen, true, 'a jump does not clear a 5m tree');
+  const rock = track.obstacles.find((o) => o.type === 'rock');
+  let st2 = { ...createPlayerState(), s: rock.s - 5, lat: rock.lat, speed: 14, airborne: true, height: 1.2, vy: 1 };
+  for (let t = 0; t < 0.5; t += 1 / 60) st2 = stepPlayer(st2, 0, 1 / 60, track);
+  assert.equal(st2.fallen, false, 'jumping over a low rock should be safe');
+  assert.ok(st2.s > rock.s, 'rock overflown');
+});
+
 test('fall respawn is always clear and inside the piste, on every track', () => {
   const dt = 1 / 60;
   for (const data of [verde, azul, negra]) {

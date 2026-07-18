@@ -126,7 +126,9 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
   }
 
   for (const o of track.obstacles) {
-    if ((o.type === 'tree' || o.type === 'rock') && !st.airborne) {
+    // Los árboles chocan también en el aire (la copa es más alta que cualquier
+    // salto); las rocas son bajas y se pueden sobrevolar.
+    if (o.type === 'tree' || (o.type === 'rock' && !st.airborne)) {
       // La roca es visualmente más pequeña que el abeto: caja de colisión más ajustada.
       const hitS = o.type === 'rock' ? 1.2 : 1.6;
       const hitLat = o.type === 'rock' ? 0.85 : 1.2;
