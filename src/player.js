@@ -126,10 +126,14 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
   }
 
   for (const o of track.obstacles) {
-    if ((o.type === 'tree' || o.type === 'rock') && !st.airborne
-        && Math.abs(st.s - o.s) < 1.6 && Math.abs(st.lat - o.lat) < 1.2) {
-      fall(st, track, params, o);
-      return st;
+    if ((o.type === 'tree' || o.type === 'rock') && !st.airborne) {
+      // La roca es visualmente más pequeña que el abeto: caja de colisión más ajustada.
+      const hitS = o.type === 'rock' ? 1.2 : 1.6;
+      const hitLat = o.type === 'rock' ? 0.85 : 1.2;
+      if (Math.abs(st.s - o.s) < hitS && Math.abs(st.lat - o.lat) < hitLat) {
+        fall(st, track, params, o);
+        return st;
+      }
     }
   }
 

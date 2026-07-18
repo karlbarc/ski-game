@@ -83,6 +83,17 @@ test('after an obstacle fall the player recovers clear of it (no repeat collisio
   assert.ok(st.s > rock.s + 2, `player should be past the obstacle, s=${st.s} vs rock ${rock.s}`);
 });
 
+test('rocks have a tighter hitbox than trees (passing 1 m beside is safe)', () => {
+  const rock = track.obstacles.find((o) => o.type === 'rock');
+  let st = { ...createPlayerState(), s: rock.s - 5, lat: rock.lat + 1.0, speed: 12 };
+  st = run(st, 0, 1);
+  assert.equal(st.fallen, false, 'passing 1 m beside a rock should be safe');
+  const tree = track.obstacles.find((o) => o.type === 'tree');
+  let st2 = { ...createPlayerState(), s: tree.s - 5, lat: tree.lat + 1.0, speed: 12 };
+  st2 = run(st2, 0, 1);
+  assert.equal(st2.fallen, true, '1 m beside a tree still hits its wider canopy');
+});
+
 test('fall respawn is always clear and inside the piste, on every track', () => {
   const dt = 1 / 60;
   for (const data of [verde, azul, negra]) {
