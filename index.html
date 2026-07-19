@@ -60,7 +60,10 @@
   #submit-status { font-size: 1.35rem; color: #ffdd57; min-height: 1.4em; }
   #rank-list { display: flex; flex-direction: column; gap: 14px; width: min(92vw, 420px); max-height: 62vh; overflow-y: auto; }
   .rank-track { background: rgb(62 105 154 / 92%); border-radius: 12px; padding: 12px 16px; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
-  .rank-track h2 { font-size: 1.45rem; font-family: 'Titan One', system-ui, sans-serif; font-weight: 400; margin-bottom: 6px; text-align: left; }
+  .rank-track h2 { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.45rem; font-family: 'Titan One', system-ui, sans-serif; font-weight: 400; margin-bottom: 6px; text-align: left; }
+  .rank-track h2 small { font-size: 1rem; font-family: system-ui, sans-serif; opacity: .75; }
+  .rank-click { cursor: pointer; }
+  .rank-click:active { background: rgb(82 130 182 / 95%); }
   .rank-row { display: flex; justify-content: space-between; font-size: 1.35rem; font-variant-numeric: tabular-nums; padding: 2px 0; }
   .rank-row.me { color: #ffdd57; font-weight: 700; }
   .rank-empty { font-size: 1.35rem; opacity: .8; text-align: left; }

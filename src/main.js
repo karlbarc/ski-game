@@ -135,41 +135,70 @@ document.addEventListener('pointerdown', () => {
 }, { once: true });
 document.getElementById('btn-menu-fall').addEventListener('click', goToMenu);
 
-// Pantalla de ranking global (top 5 por pista)
+// Ranking global: resumen (top 3 por pista) y detalle al tocar una pista.
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let rankDetailOpen = false;
+
+function rankRowsHtml(rows, mine, me) {
+  let body = rows.length === 0
+    ? '<p class="rank-empty">Aún no hay tiempos. ¡Sé el primero!</p>'
+    : rows.map((r, i) =>
+        `<div class="rank-row${r.player_id === me ? ' me' : ''}"><span>${i + 1}. ${escapeHtml(r.name)}</span><span>${formatTime(r.time_cs / 100)}</span></div>`)
+      .join('');
+  // si tienes marca pero no estás entre los mostrados, tu posición al final
+  if (mine && mine.rank > rows.length) {
+    body += '<div class="rank-row"><span>⋯</span><span></span></div>'
+      + `<div class="rank-row me"><span>${mine.rank}. ${escapeHtml(mine.name)}</span><span>${formatTime(mine.time_cs / 100)}</span></div>`;
+  }
+  return body;
+}
+
 async function showRanking() {
+  rankDetailOpen = false;
   document.getElementById('track-screen').classList.remove('visible');
-  const screen = document.getElementById('rank-screen');
   const list = document.getElementById('rank-list');
-  screen.classList.add('visible');
+  document.getElementById('rank-screen').classList.add('visible');
   list.innerHTML = '<p class="rank-empty">Cargando…</p>';
   const me = playerId();
-  // los nombres son texto de otros jugadores: escapar antes de inyectar en HTML
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const sections = await Promise.all(Object.values(TRACKS).map(async (data) => {
-    let rows;
-    let mine;
+  const sections = await Promise.all(Object.entries(TRACKS).map(async ([key, data]) => {
     try {
-      [rows, mine] = await Promise.all([fetchTop(data.name, 5), fetchMyRank(data.name)]);
+      const [rows, mine] = await Promise.all([fetchTop(data.name, 3), fetchMyRank(data.name)]);
+      return `<div class="rank-track rank-click" data-track="${key}">`
+        + `<h2>${data.emoji} ${data.name}<small>ver todo ›</small></h2>`
+        + rankRowsHtml(rows, mine, me) + '</div>';
     } catch {
       return `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2><p class="rank-empty">Sin conexión</p></div>`;
     }
-    let body = rows.length === 0
-      ? '<p class="rank-empty">Aún no hay tiempos. ¡Sé el primero!</p>'
-      : rows.map((r, i) =>
-          `<div class="rank-row${r.player_id === me ? ' me' : ''}"><span>${i + 1}. ${esc(r.name)}</span><span>${formatTime(r.time_cs / 100)}</span></div>`)
-        .join('');
-    // si tienes marca pero no estás en el top mostrado, tu posición al final
-    if (mine && mine.rank > rows.length) {
-      body += `<div class="rank-row"><span>⋯</span><span></span></div>`
-        + `<div class="rank-row me"><span>${mine.rank}. ${esc(mine.name)}</span><span>${formatTime(mine.time_cs / 100)}</span></div>`;
-    }
-    return `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2>${body}</div>`;
   }));
+  if (rankDetailOpen) return; // el usuario ya entró a un detalle mientras cargaba
   list.innerHTML = sections.join('');
+  for (const el of list.querySelectorAll('.rank-click')) {
+    el.addEventListener('click', () => showTrackRanking(el.dataset.track));
+  }
 }
+
+async function showTrackRanking(key) {
+  rankDetailOpen = true;
+  const data = TRACKS[key];
+  const list = document.getElementById('rank-list');
+  list.innerHTML = '<p class="rank-empty">Cargando…</p>';
+  try {
+    const me = playerId();
+    const [rows, mine] = await Promise.all([fetchTop(data.name, 50), fetchMyRank(data.name)]);
+    list.innerHTML = `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2>`
+      + rankRowsHtml(rows, mine, me) + '</div>';
+  } catch {
+    list.innerHTML = '<p class="rank-empty">Sin conexión</p>';
+  }
+}
+
 document.getElementById('btn-ranking').addEventListener('click', showRanking);
 document.getElementById('btn-back-tracks').addEventListener('click', () => {
+  if (rankDetailOpen) {
+    showRanking(); // del detalle al resumen
+    return;
+  }
   document.getElementById('rank-screen').classList.remove('visible');
   document.getElementById('track-screen').classList.add('visible');
 });
