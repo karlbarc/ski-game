@@ -331,17 +331,59 @@ function autopilotSteer() {
   return Math.max(-1, Math.min(1, steerFF + (headingTarget - player.heading) * 3));
 }
 
+// Entrada de nombre estilo arcade: 3 iniciales con teclado en pantalla.
+let initials = [];
+
+function renderSlots() {
+  const slots = document.querySelectorAll('#initial-slots .slot');
+  slots.forEach((slot, i) => {
+    slot.textContent = initials[i] || '';
+    slot.classList.toggle('active', i === Math.min(initials.length, 2));
+  });
+  const ok = document.querySelector('#letter-grid .key-ok');
+  if (ok) ok.disabled = initials.length < 3;
+}
+
+function buildLetterGrid() {
+  const grid = document.getElementById('letter-grid');
+  if (grid.childElementCount) return;
+  const key = (label, onTap, cls = '') => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.addEventListener('click', onTap);
+    grid.appendChild(b);
+  };
+  for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
+    key(ch, () => {
+      if (initials.length < 3) initials.push(ch);
+      renderSlots();
+    });
+  }
+  key('←', () => {
+    initials.pop();
+    renderSlots();
+  }, 'key-del');
+  key('OK', () => {
+    if (initials.length < 3) return;
+    const name = initials.join('');
+    savePlayerName(name);
+    document.getElementById('submit-box').style.display = 'none';
+    sendScore(name);
+  }, 'key-ok');
+}
+
 function offerRankingSubmit() {
   const box = document.getElementById('submit-box');
-  const status = document.getElementById('submit-status');
-  const input = document.getElementById('player-name');
-  status.textContent = '';
+  document.getElementById('submit-status').textContent = '';
   const saved = playerName();
   if (saved) {
     box.style.display = 'none';
     sendScore(saved);
   } else {
-    input.value = '';
+    buildLetterGrid();
+    initials = [];
+    renderSlots();
     box.style.display = 'flex';
   }
 }
@@ -356,14 +398,6 @@ function sendScore(name) {
     .then(() => { status.textContent = `🏆 En el ranking como ${name}`; })
     .catch(() => { status.textContent = 'No se pudo subir (sin conexión)'; });
 }
-
-document.getElementById('btn-submit-score').addEventListener('click', () => {
-  const name = document.getElementById('player-name').value.trim();
-  if (!name) return;
-  savePlayerName(name);
-  document.getElementById('submit-box').style.display = 'none';
-  sendScore(name);
-});
 
 function finish() {
   finishShown = true;
@@ -464,7 +498,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-window.__game = { state: () => ({ player, race, paused }), trackLength: 0 };
+window.__game = { state: () => ({ player, race, paused }), trackLength: 0, openSubmit: () => offerRankingSubmit() };
 loadTrack(TRACKS[selectedTrack]);
 
 // Los runs de verificación (autopilot) saltan los menús y arrancan directos.

@@ -54,9 +54,15 @@
   #finish-record { color: #ffdd57; font-weight: 700; }
   #finish-screen p { font-size: 1.35rem; }
   #fall-meters { font-size: 1.45rem; font-weight: 700; }
-  #submit-box { display: flex; gap: 8px; align-items: center; }
-  #player-name { font-size: 1.35rem; padding: 10px 12px; border: none; border-radius: 10px; width: 11ch; text-align: center; }
-  #btn-submit-score { font-size: 1.2rem !important; padding: 10px 16px !important; }
+  #submit-box { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  #arcade-title { font-family: 'Titan One', system-ui, sans-serif; font-size: 1.35rem; color: #ffdd57; letter-spacing: 1px; }
+  #initial-slots { display: flex; gap: 14px; }
+  .slot { width: 58px; height: 64px; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', system-ui, sans-serif; font-size: 2.4rem; background: rgba(6, 20, 34, .7); border-radius: 10px; border-bottom: 4px solid rgba(255,255,255,.25); }
+  .slot.active { border-bottom-color: #ffdd57; animation: slot-blink 1s steps(2) infinite; }
+  @keyframes slot-blink { 50% { border-bottom-color: transparent; } }
+  #letter-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; width: min(92vw, 370px); }
+  #letter-grid button { font-size: 1.35rem !important; padding: 8px 0 !important; border-radius: 8px !important; font-family: 'Titan One', system-ui, sans-serif; box-shadow: none !important; }
+  #letter-grid button:disabled { opacity: .35; }
   #submit-status { font-size: 1.35rem; color: #ffdd57; min-height: 1.4em; }
   #rank-list { display: flex; flex-direction: column; gap: 14px; width: min(92vw, 420px); max-height: 62vh; overflow-y: auto; }
   .rank-track { background: rgb(62 105 154 / 92%); border-radius: 12px; padding: 12px 16px; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
@@ -106,8 +112,9 @@
   <p id="finish-speed"></p>
   <p id="finish-record" style="display:none">¡Nuevo récord!</p>
   <div id="submit-box" style="display:none">
-    <input id="player-name" maxlength="12" placeholder="Tu nombre" autocomplete="off">
-    <button id="btn-submit-score">Subir al ranking</button>
+    <p id="arcade-title">Introduce tus iniciales</p>
+    <div id="initial-slots"><span class="slot"></span><span class="slot"></span><span class="slot"></span></div>
+    <div id="letter-grid"></div>
   </div>
   <p id="submit-status"></p>
   <button id="btn-restart">Reintentar</button>
