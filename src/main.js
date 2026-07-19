@@ -338,10 +338,10 @@ function renderSlots() {
   const slots = document.querySelectorAll('#initial-slots .slot');
   slots.forEach((slot, i) => {
     slot.textContent = initials[i] || '';
-    slot.classList.toggle('active', i === Math.min(initials.length, 2));
+    slot.classList.toggle('active', i === Math.min(initials.length, 7));
   });
   const ok = document.querySelector('#letter-grid .key-ok');
-  if (ok) ok.disabled = initials.length < 3;
+  if (ok) ok.disabled = initials.length < 3; // mínimo 3 letras, máximo 8
 }
 
 function buildLetterGrid() {
@@ -356,7 +356,7 @@ function buildLetterGrid() {
   };
   for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
     key(ch, () => {
-      if (initials.length < 3) initials.push(ch);
+      if (initials.length < 8) initials.push(ch);
       renderSlots();
     });
   }

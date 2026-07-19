@@ -56,8 +56,8 @@
   #fall-meters { font-size: 1.45rem; font-weight: 700; }
   #submit-box { display: flex; flex-direction: column; gap: 12px; align-items: center; }
   #arcade-title { font-family: 'Titan One', system-ui, sans-serif; font-size: 1.35rem; color: #ffdd57; letter-spacing: 1px; }
-  #initial-slots { display: flex; gap: 14px; }
-  .slot { width: 58px; height: 64px; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', system-ui, sans-serif; font-size: 2.4rem; background: rgba(6, 20, 34, .7); border-radius: 10px; border-bottom: 4px solid rgba(255,255,255,.25); }
+  #initial-slots { display: flex; gap: 5px; }
+  .slot { width: 40px; height: 52px; display: flex; align-items: center; justify-content: center; font-family: 'Titan One', system-ui, sans-serif; font-size: 1.8rem; background: rgba(6, 20, 34, .7); border-radius: 8px; border-bottom: 4px solid rgba(255,255,255,.25); }
   .slot.active { border-bottom-color: #ffdd57; animation: slot-blink 1s steps(2) infinite; }
   @keyframes slot-blink { 50% { border-bottom-color: transparent; } }
   #letter-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; width: min(92vw, 370px); }
@@ -112,8 +112,8 @@
   <p id="finish-speed"></p>
   <p id="finish-record" style="display:none">¡Nuevo récord!</p>
   <div id="submit-box" style="display:none">
-    <p id="arcade-title">Introduce tus iniciales</p>
-    <div id="initial-slots"><span class="slot"></span><span class="slot"></span><span class="slot"></span></div>
+    <p id="arcade-title">Introduce tu nombre</p>
+    <div id="initial-slots"><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span><span class="slot"></span></div>
     <div id="letter-grid"></div>
   </div>
   <p id="submit-status"></p>
