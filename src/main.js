@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { buildTrack, mulberry32 } from './track.js?v=1784472894';
-import { verde } from './tracks/verde.js?v=1784472894';
-import { azul } from './tracks/azul.js?v=1784472894';
-import { negra } from './tracks/negra.js?v=1784472894';
-import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=1784472894';
+import { buildTrack, mulberry32 } from './track.js?v=1784474224';
+import { verde } from './tracks/verde.js?v=1784474224';
+import { azul } from './tracks/azul.js?v=1784474224';
+import { negra } from './tracks/negra.js?v=1784474224';
+import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=1784474224';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
-} from './race.js?v=1784472894';
-import { createControls } from './controls.js?v=1784472894';
-import { createHud } from './hud.js?v=1784472894';
-import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784472894';
-import { createSnowSound } from './audio.js?v=1784472894';
+} from './race.js?v=1784474224';
+import { createControls } from './controls.js?v=1784474224';
+import { createHud } from './hud.js?v=1784474224';
+import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784474224';
+import { createSnowSound } from './audio.js?v=1784474224';
 
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
