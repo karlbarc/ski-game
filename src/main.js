@@ -10,6 +10,7 @@ import {
 } from './race.js?v=1784380215';
 import { createControls } from './controls.js?v=1784380215';
 import { createHud } from './hud.js?v=1784380215';
+import { playerId, playerName, savePlayerName, submitScore, fetchTop } from './ranking.js?v=0';
 import { createSnowSound } from './audio.js?v=1784380215';
 
 const query = new URLSearchParams(location.search);
@@ -133,6 +134,39 @@ document.addEventListener('pointerdown', () => {
   }
 }, { once: true });
 document.getElementById('btn-menu-fall').addEventListener('click', goToMenu);
+
+// Pantalla de ranking global (top 5 por pista)
+async function showRanking() {
+  document.getElementById('track-screen').classList.remove('visible');
+  const screen = document.getElementById('rank-screen');
+  const list = document.getElementById('rank-list');
+  screen.classList.add('visible');
+  list.innerHTML = '<p class="rank-empty">Cargando…</p>';
+  const me = playerId();
+  // los nombres son texto de otros jugadores: escapar antes de inyectar en HTML
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const sections = await Promise.all(Object.values(TRACKS).map(async (data) => {
+    let rows;
+    try {
+      rows = await fetchTop(data.name, 5);
+    } catch {
+      return `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2><p class="rank-empty">Sin conexión</p></div>`;
+    }
+    const body = rows.length === 0
+      ? '<p class="rank-empty">Aún no hay tiempos. ¡Sé el primero!</p>'
+      : rows.map((r, i) =>
+          `<div class="rank-row${r.player_id === me ? ' me' : ''}"><span>${i + 1}. ${esc(r.name)}</span><span>${formatTime(r.time_cs / 100)}</span></div>`)
+        .join('');
+    return `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2>${body}</div>`;
+  }));
+  list.innerHTML = sections.join('');
+}
+document.getElementById('btn-ranking').addEventListener('click', showRanking);
+document.getElementById('btn-back-tracks').addEventListener('click', () => {
+  document.getElementById('rank-screen').classList.remove('visible');
+  document.getElementById('track-screen').classList.add('visible');
+});
 document.getElementById('btn-menu-pause').addEventListener('click', goToMenu);
 
 let selectedTrack = TRACKS[query.get('track')] ? query.get('track') : 'verde';
@@ -262,6 +296,40 @@ function autopilotSteer() {
   return Math.max(-1, Math.min(1, steerFF + (headingTarget - player.heading) * 3));
 }
 
+function offerRankingSubmit() {
+  const box = document.getElementById('submit-box');
+  const status = document.getElementById('submit-status');
+  const input = document.getElementById('player-name');
+  status.textContent = '';
+  const saved = playerName();
+  if (saved) {
+    box.style.display = 'none';
+    sendScore(saved);
+  } else {
+    input.value = '';
+    box.style.display = 'flex';
+  }
+}
+
+function sendScore(name) {
+  const status = document.getElementById('submit-status');
+  const best = loadBest(localStorage, track.data.name);
+  const bestSpeed = loadBestSpeed(localStorage, track.data.name);
+  if (best == null) return;
+  status.textContent = 'Subiendo al ranking…';
+  submitScore({ track: track.data.name, name, timeSec: best, speedKmh: bestSpeed })
+    .then(() => { status.textContent = `🏆 En el ranking como ${name}`; })
+    .catch(() => { status.textContent = 'No se pudo subir (sin conexión)'; });
+}
+
+document.getElementById('btn-submit-score').addEventListener('click', () => {
+  const name = document.getElementById('player-name').value.trim();
+  if (!name) return;
+  savePlayerName(name);
+  document.getElementById('submit-box').style.display = 'none';
+  sendScore(name);
+});
+
 function finish() {
   finishShown = true;
   snow.cheer();
@@ -270,6 +338,8 @@ function finish() {
   const recordEligible = TIMESCALE === 1 && !AUTOPILOT;
   const isRecord = recordEligible ? saveBest(localStorage, track.data.name, time) : false;
   if (recordEligible) saveBestSpeed(localStorage, track.data.name, maxKmh);
+  if (recordEligible) offerRankingSubmit();
+  else document.getElementById('submit-box').style.display = 'none';
   const best = loadBest(localStorage, track.data.name);
   const bestSpeed = loadBestSpeed(localStorage, track.data.name);
   document.getElementById('finish-track').textContent = `Pista ${track.data.name}`;

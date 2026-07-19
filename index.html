@@ -54,6 +54,18 @@
   #finish-record { color: #ffdd57; font-weight: 700; }
   #finish-screen p { font-size: 1.35rem; }
   #fall-meters { font-size: 1.45rem; font-weight: 700; }
+  #submit-box { display: flex; gap: 8px; align-items: center; }
+  #player-name { font-size: 1.35rem; padding: 10px 12px; border: none; border-radius: 10px; width: 11ch; text-align: center; }
+  #btn-submit-score { font-size: 1.2rem !important; padding: 10px 16px !important; }
+  #submit-status { font-size: 1.35rem; color: #ffdd57; min-height: 1.4em; }
+  #rank-list { display: flex; flex-direction: column; gap: 14px; width: min(92vw, 420px); max-height: 62vh; overflow-y: auto; }
+  .rank-track { background: rgb(62 105 154 / 92%); border-radius: 12px; padding: 12px 16px; box-shadow: 0 6px 16px rgba(0,0,0,.4); }
+  .rank-track h2 { font-size: 1.45rem; font-family: 'Titan One', system-ui, sans-serif; font-weight: 400; margin-bottom: 6px; text-align: left; }
+  .rank-row { display: flex; justify-content: space-between; font-size: 1.35rem; font-variant-numeric: tabular-nums; padding: 2px 0; }
+  .rank-row.me { color: #ffdd57; font-weight: 700; }
+  .rank-empty { font-size: 1.35rem; opacity: .8; text-align: left; }
+  #btn-back-tracks { background: none; box-shadow: none; font-size: 1.35rem; opacity: .8; padding: 8px; }
+  #btn-ranking { font-size: 1.35rem !important; padding: 10px 24px !important; }
   #finish-screen #finish-track { font-size: 1.35rem; opacity: .85; }
   #finish-screen #finish-time { font-size: 1.85rem; font-weight: 700; }
   #finish-screen #finish-record { font-size: 1.45rem; }
@@ -75,7 +87,13 @@
 <div id="track-screen" class="overlay">
   <h1>Elige pista</h1>
   <div id="track-list"></div>
+  <button id="btn-ranking">🏆 Ver ranking</button>
   <button id="btn-back-controls">‹ Cambiar controles</button>
+</div>
+<div id="rank-screen" class="overlay">
+  <h1>🏆 Ranking</h1>
+  <div id="rank-list"></div>
+  <button id="btn-back-tracks">‹ Volver</button>
 </div>
 <div id="finish-screen" class="overlay">
   <h1>🏁 ¡Meta!</h1>
@@ -84,6 +102,11 @@
   <p id="finish-best"></p>
   <p id="finish-speed"></p>
   <p id="finish-record" style="display:none">¡Nuevo récord!</p>
+  <div id="submit-box" style="display:none">
+    <input id="player-name" maxlength="12" placeholder="Tu nombre" autocomplete="off">
+    <button id="btn-submit-score">Subir al ranking</button>
+  </div>
+  <p id="submit-status"></p>
   <button id="btn-restart">Reintentar</button>
   <button id="btn-menu">Inicio</button>
 </div>
