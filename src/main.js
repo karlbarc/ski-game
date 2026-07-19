@@ -13,6 +13,7 @@ import { createHud } from './hud.js?v=1784474224';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784474224';
 import { createSnowSound } from './audio.js?v=1784474224';
 
+const GAME_VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
 const TIMESCALE = parseFloat(query.get('timescale') || '1');
@@ -81,6 +82,37 @@ let paused = false;
 let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
 let runMaxSpeed = 0; // velocidad máxima de la bajada actual (m/s)
 let crashSpeed = 0;  // velocidad en el momento de la caída (se muestra congelada)
+let runFrames = 0;   // frames de la bajada en curso (para FPS promedio)
+
+function bumpCounter(key) {
+  const k = `ski-${key}-${track.data.name}`;
+  const v = (parseInt(localStorage.getItem(k), 10) || 0) + 1;
+  localStorage.setItem(k, String(v));
+  return v;
+}
+function readCounter(key) {
+  return parseInt(localStorage.getItem(`ski-${key}-${track.data.name}`), 10) || 0;
+}
+
+// Contexto del dispositivo y de la partida que acompaña cada marca del ranking.
+function buildMeta() {
+  const elapsed = race.elapsed || 1;
+  return {
+    control: controls.mode(),
+    screen: `${screen.width}x${screen.height}`,
+    viewport: `${innerWidth}x${innerHeight}`,
+    dpr: Math.round(devicePixelRatio * 100) / 100,
+    orientation: innerWidth > innerHeight ? 'landscape' : 'portrait',
+    ua: navigator.userAgent.slice(0, 180),
+    platform: navigator.userAgentData?.platform || navigator.platform || '',
+    lang: navigator.language,
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    version: GAME_VERSION,
+    fps: Math.round(runFrames / elapsed),
+    attempts: readCounter('attempts'),
+    falls: readCounter('falls'),
+  };
+}
 let crowd = [];      // público animado junto a la meta (lo puebla makeCrowd)
 
 const hud = createHud();
@@ -287,6 +319,7 @@ function restart() {
   steerSmooth = 0;
   runMaxSpeed = 0;
   crashSpeed = 0;
+  runFrames = 0;
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
   document.getElementById('fall-screen').classList.remove('visible');
@@ -394,7 +427,7 @@ function sendScore(name) {
   const bestSpeed = loadBestSpeed(localStorage, track.data.name);
   if (best == null) return;
   status.textContent = 'Subiendo al ranking…';
-  submitScore({ track: track.data.name, name, timeSec: best, speedKmh: bestSpeed })
+  submitScore({ track: track.data.name, name, timeSec: best, speedKmh: bestSpeed, meta: buildMeta() })
     .then(() => { status.textContent = `🏆 En el ranking como ${name}`; })
     .catch(() => { status.textContent = 'No se pudo subir (sin conexión)'; });
 }
@@ -454,10 +487,16 @@ function tick(now) {
     steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * 3);
     const prev = player;
     player = stepPlayer(player, steerSmooth, dt, track);
-    if (!player.fallen) race = updateRace(race, player.s, now); // caído: crono congelado
+    if (!player.fallen) {
+      const prevStatus = race.status;
+      race = updateRace(race, player.s, now);
+      if (prevStatus === 'ready' && race.status === 'running') bumpCounter('attempts');
+      if (race.status === 'running') runFrames += 1;
+    }
     if (race.status === 'running') runMaxSpeed = Math.max(runMaxSpeed, player.speed);
     if (player.fallen && !prev.fallen) {
       snow.ouch();
+      bumpCounter('falls');
       if (AUTOPILOT) {
         player = recoverPlayer(player); // los runs de verificación se levantan solos
       } else {

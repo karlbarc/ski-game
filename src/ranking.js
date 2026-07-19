@@ -23,13 +23,14 @@ export function savePlayerName(name, storage = localStorage) {
 }
 
 // Sube (o actualiza) la entrada del jugador para una pista.
-export async function submitScore({ track, name, timeSec, speedKmh }) {
+export async function submitScore({ track, name, timeSec, speedKmh, meta = {} }) {
   const body = {
     player_id: playerId(),
     track,
     name: name.trim().slice(0, 12),
     time_cs: Math.round(timeSec * 100),
     speed_kmh: Math.min(200, Math.max(0, Math.round(speedKmh || 0))),
+    meta,
   };
   const res = await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
     method: 'POST',
