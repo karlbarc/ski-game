@@ -88,6 +88,33 @@ export function createSnowSound() {
   }
 
   let lastResumeTry = 0;
+  let suspectedDead = false; // contexto "zombi" de iOS: dice correr pero no suena
+  let aliveTimer = null;
+
+  // Tras volver del segundo plano, comprueba que el reloj del contexto avanza.
+  // Si está congelado, el contexto murió: se reconstruirá en el próximo gesto.
+  function checkAlive() {
+    if (!ctx || document.hidden) return;
+    const t0 = ctx.currentTime;
+    clearTimeout(aliveTimer);
+    aliveTimer = setTimeout(() => {
+      if (!ctx || document.hidden) return;
+      if (ctx.state === 'running' && ctx.currentTime === t0) suspectedDead = true;
+    }, 400);
+  }
+
+  function rebuild() {
+    try { if (ctx) ctx.close(); } catch { /* ya cerrado */ }
+    ctx = null;
+    master = null;
+    gain = null;
+    filter = null;
+    musicSrc = null;
+    musicGain = null;
+    ensure();
+    if (musicWanted) startMusic();
+    checkAlive();
+  }
 
   function resume() {
     if (!ctx || ctx.state === 'running') return;
@@ -124,11 +151,24 @@ export function createSnowSound() {
         document.addEventListener('visibilitychange', () => {
           bgHidden = document.hidden;
           applyMasterGain();
-          if (!document.hidden) resume();
+          if (!document.hidden) {
+            resume();
+            checkAlive();
+          }
         });
-        // Cualquier gesto reactiva el audio (iOS exige gesto para resume()).
+        // Cualquier gesto reactiva el audio (iOS exige gesto para resume());
+        // si el vigilante marcó el contexto como muerto, se reconstruye aquí,
+        // dentro del gesto, que es donde iOS permite crear audio que suene.
+        const onGesture = () => {
+          if (suspectedDead) {
+            suspectedDead = false;
+            rebuild();
+          } else {
+            resume();
+          }
+        };
         for (const ev of ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown']) {
-          window.addEventListener(ev, resume, { passive: true });
+          window.addEventListener(ev, onGesture, { passive: true });
         }
       }
     },
