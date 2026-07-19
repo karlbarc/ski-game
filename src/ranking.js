@@ -47,3 +47,20 @@ export async function fetchTop(track, limit = 10) {
   if (!res.ok) throw new Error(`ranking HTTP ${res.status}`);
   return res.json();
 }
+
+// Posición global del jugador en una pista (1 = mejor). null si no tiene marca.
+export async function fetchMyRank(track) {
+  const id = playerId();
+  const own = await fetch(`${SUPABASE_URL}/rest/v1/scores`
+    + `?track=eq.${encodeURIComponent(track)}&player_id=eq.${id}&select=name,time_cs`,
+    { headers });
+  if (!own.ok) throw new Error(`ranking HTTP ${own.status}`);
+  const rows = await own.json();
+  if (rows.length === 0) return null;
+  const better = await fetch(`${SUPABASE_URL}/rest/v1/scores`
+    + `?track=eq.${encodeURIComponent(track)}&time_cs=lt.${rows[0].time_cs}&select=player_id`,
+    { method: 'HEAD', headers: { ...headers, Prefer: 'count=exact' } });
+  if (!better.ok) throw new Error(`ranking HTTP ${better.status}`);
+  const count = parseInt(better.headers.get('content-range').split('/')[1], 10);
+  return { rank: count + 1, name: rows[0].name, time_cs: rows[0].time_cs };
+}

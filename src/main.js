@@ -10,7 +10,7 @@ import {
 } from './race.js?v=1784470084';
 import { createControls } from './controls.js?v=1784470084';
 import { createHud } from './hud.js?v=1784470084';
-import { playerId, playerName, savePlayerName, submitScore, fetchTop } from './ranking.js?v=1784470084';
+import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784470084';
 import { createSnowSound } from './audio.js?v=1784470084';
 
 const query = new URLSearchParams(location.search);
@@ -148,16 +148,22 @@ async function showRanking() {
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const sections = await Promise.all(Object.values(TRACKS).map(async (data) => {
     let rows;
+    let mine;
     try {
-      rows = await fetchTop(data.name, 5);
+      [rows, mine] = await Promise.all([fetchTop(data.name, 5), fetchMyRank(data.name)]);
     } catch {
       return `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2><p class="rank-empty">Sin conexión</p></div>`;
     }
-    const body = rows.length === 0
+    let body = rows.length === 0
       ? '<p class="rank-empty">Aún no hay tiempos. ¡Sé el primero!</p>'
       : rows.map((r, i) =>
           `<div class="rank-row${r.player_id === me ? ' me' : ''}"><span>${i + 1}. ${esc(r.name)}</span><span>${formatTime(r.time_cs / 100)}</span></div>`)
         .join('');
+    // si tienes marca pero no estás en el top mostrado, tu posición al final
+    if (mine && mine.rank > rows.length) {
+      body += `<div class="rank-row"><span>⋯</span><span></span></div>`
+        + `<div class="rank-row me"><span>${mine.rank}. ${esc(mine.name)}</span><span>${formatTime(mine.time_cs / 100)}</span></div>`;
+    }
     return `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2>${body}</div>`;
   }));
   list.innerHTML = sections.join('');
