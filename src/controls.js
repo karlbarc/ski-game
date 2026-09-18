@@ -12,6 +12,7 @@ export function createControls(target = window) {
     state.keyboard = (keys.has('ArrowLeft') ? 1 : 0) + (keys.has('ArrowRight') ? -1 : 0);
   }
   target.addEventListener('keydown', (e) => {
+    if (e.target?.closest?.('input, textarea, [contenteditable]')) return;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       keys.add(e.key);
       syncKeys();
@@ -23,16 +24,20 @@ export function createControls(target = window) {
   });
 
   function touchSync(e) {
+    if (e.target?.closest?.('.overlay')) { state.touch = 0; return; }
     let v = 0;
     for (const t of e.touches) v = t.clientX < innerWidth / 2 ? 1 : -1;
     state.touch = e.touches.length ? v : 0;
   }
   target.addEventListener('touchstart', touchSync, { passive: false });
   target.addEventListener('touchmove', (e) => {
+    if (e.target?.closest?.('.overlay')) return;
     e.preventDefault();
     touchSync(e);
   }, { passive: false });
   target.addEventListener('touchend', touchSync);
+  target.addEventListener('touchcancel', () => { state.touch = 0; });
+  target.addEventListener('blur', () => { keys.clear(); syncKeys(); state.touch = 0; });
 
   target.addEventListener('deviceorientation', (e) => {
     if (e.gamma == null) return;

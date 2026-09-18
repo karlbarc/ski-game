@@ -1,0 +1,66 @@
+// Pista Alpina: descenso largo con hombros suaves, dos palas pronunciadas,
+// una travesía curva y un valle de eses amplias antes de la llegada.
+export const alpina = {
+  name: 'Alpina',
+  emoji: '🏔️',
+  difficulty: 'Media · terreno variado',
+  accent: '#29a6a0',
+  description: 'Pendientes variadas, curvas amplias, rocas y tres saltos.',
+  width: 18,
+  controlPoints: [
+    // Salida y aproximación suave a la primera pala.
+    [0, 0, 0],
+    [0, -5, -55],
+    [8, -11, -115],
+    [26, -22, -170],
+    // Pala abierta: aumenta la pendiente de forma progresiva.
+    [48, -42, -225],
+    [65, -63, -285],
+    [64, -77, -340],
+    // Hombro y travesía: menos pendiente, giro largo a la izquierda.
+    [40, -83, -390],
+    [0, -87, -435],
+    [-45, -92, -475],
+    [-78, -100, -525],
+    // Segunda pala, más sostenida, antes del valle.
+    [-90, -117, -580],
+    [-81, -139, -640],
+    [-54, -157, -695],
+    [-15, -167, -745],
+    // Eses amplias con cambios suaves de inclinación.
+    [28, -173, -800],
+    [57, -178, -855],
+    [61, -185, -910],
+    [44, -197, -965],
+    [14, -208, -1020],
+    [-8, -215, -1075],
+    // Llegada despejada y de pendiente suave.
+    [-12, -219, -1130],
+    [-10, -223, -1185],
+  ],
+  // Saltos opcionales con recepción despejada y rocas que permiten elegir trazada.
+  obstacles: [
+    { type: 'tree', t: 0.065, offset: 6.5 },
+    { type: 'rock', t: 0.09, offset: -3.5 },
+    { type: 'rock', t: 0.12, offset: -6.8 },
+    { type: 'jump', t: 0.16, offset: 0 },
+    { type: 'tree', t: 0.20, variant: 'tall', offset: 7 },
+    { type: 'rock', t: 0.23, offset: 3.6 },
+    { type: 'rock', t: 0.265, offset: -6.5 },
+    { type: 'tree', t: 0.34, offset: 6.8 },
+    { type: 'rock', t: 0.38, offset: -3.8 },
+    { type: 'tree', t: 0.415, variant: 'tall', offset: -7 },
+    { type: 'rock', t: 0.46, offset: 3.5 },
+    { type: 'rock', t: 0.49, offset: 6.5 },
+    { type: 'jump', t: 0.53, offset: 0 },
+    { type: 'tree', t: 0.57, offset: -6.8 },
+    { type: 'tree', t: 0.65, variant: 'tall', offset: 7 },
+    { type: 'rock', t: 0.69, offset: -3.5 },
+    { type: 'rock', t: 0.735, offset: -6.5 },
+    { type: 'rock', t: 0.78, offset: 3.6 },
+    { type: 'tree', t: 0.82, offset: 6.8 },
+    { type: 'jump', t: 0.87, offset: 0 },
+    { type: 'tree', t: 0.895, variant: 'tall', offset: -7 },
+    { type: 'rock', t: 0.94, offset: -3.4 },
+  ],
+};

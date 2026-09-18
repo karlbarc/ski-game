@@ -3,6 +3,7 @@ import { buildTrack, mulberry32 } from './track.js?v=1784480748';
 import { verde } from './tracks/verde.js?v=1784480748';
 import { azul } from './tracks/azul.js?v=1784480748';
 import { negra } from './tracks/negra.js?v=1784480748';
+import { alpina } from './tracks/alpina.js?v=1784480748';
 import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=1784480748';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
@@ -11,7 +12,7 @@ import {
 import { createControls } from './controls.js?v=1784480748';
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784480748';
-import { createSnowSound } from './audio.js?v=1784480748';
+import { createSnowSound } from './audio.js?v=1789739534';
 
 const GAME_VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const query = new URLSearchParams(location.search);
@@ -25,25 +26,62 @@ try {
   document.getElementById('error-screen').classList.add('visible');
   throw e;
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// En móvil el presupuesto de GPU es mucho menor: bajamos resolución de sombra
+// y pixel ratio antes que arriesgar el framerate. `?quality=alta|baja` fuerza
+// el modo para poder comparar.
+const qualityParam = query.get('quality');
+const LOW_END = qualityParam
+  ? qualityParam === 'baja'
+  : (navigator.hardwareConcurrency || 4) <= 4 || /Android|iPhone|iPad/.test(navigator.userAgent);
+
+renderer.setPixelRatio(Math.min(devicePixelRatio, LOW_END ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
+// Pipeline de color fotográfico: ACES comprime los altos (la nieve deja de
+// quemarse a blanco plano) y sRGB corrige el gamma de salida.
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+// Sombras suaves: es lo que ancla árboles y rocas a la nieve.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = LOW_END ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xcfe8fb);
-scene.fog = new THREE.Fog(0xcfe8fb, 60, 260);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.1));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-sun.position.set(80, 120, -40);
+// Niebla exponencial: la densidad crece con la distancia como la bruma real,
+// y funde el fondo lejano sin el corte duro de la niebla lineal.
+scene.fog = new THREE.FogExp2(0xd6e6f5, 0.0042);
+// Luz de cielo: la nieve en sombra se ilumina de azul (rebote del cielo) y
+// el rebote del suelo devuelve blanco cálido. Es la firma de la luz alpina.
+scene.add(new THREE.HemisphereLight(0x8fb4e4, 0xeee2d0, 1.3)); // relleno frío: tiñe de azul lo que queda en sombra
+const sun = new THREE.DirectionalLight(0xffe6b8, 3.1); // sol bajo, dorado
+sun.position.set(110, 58, -34); // sol bajo: luz rasante que alarga sombras
+sun.castShadow = true;
+// El sol sigue al jugador (ver updateCamera): el volumen de sombra es una caja
+// pequeña alrededor de la cámara, así se gana resolución donde de verdad se ve.
+sun.shadow.mapSize.set(LOW_END ? 1024 : 2048, LOW_END ? 1024 : 2048);
+// Caja de 160 m de lado: cubre lo que se ve con niebla y a 2048 px deja ~8 cm
+// por texel, suficiente para sombras de árbol nítidas sin artefactos.
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 400;
+sun.shadow.camera.left = -80;
+sun.shadow.camera.right = 80;
+sun.shadow.camera.top = 80;
+sun.shadow.camera.bottom = -80;
+sun.shadow.camera.updateProjectionMatrix(); // sin esto los límites de arriba no se aplican
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.35;
 scene.add(sun);
+scene.add(sun.target);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 3000);
 const skis = makeSkis();
 camera.add(skis);
 scene.add(camera); // necesario para que se rendericen los hijos de la cámara
 
-const TRACKS = { verde, azul, negra };
-const snowTexture = makeSnowTexture();
+const TRACKS = { verde, azul, negra, alpina };
+const pisteSnow = makeSnowSurface(true);
+const powderSnow = makeSnowSurface(false);
 
 let track = null;
 let START_S = 15;
@@ -57,9 +95,10 @@ function loadTrack(data) {
   START_S = 15;
   FINISH_S = track.length - 15;
   worldGroup = new THREE.Group();
-  worldGroup.add(makeRibbon(track, -track.width / 2, track.width / 2, 0xf4f9ff, 0, snowTexture));
-  worldGroup.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, 0xdde7ee, 0.15, snowTexture));
-  worldGroup.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, 0xdde7ee, 0.15, snowTexture));
+  worldGroup.add(makeSurroundingTerrain(track));
+  worldGroup.add(makeRibbon(track, -track.width / 2, track.width / 2, pisteSnow));
+  worldGroup.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, powderSnow));
+  worldGroup.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, powderSnow));
   worldGroup.add(makeTrees(track));
   worldGroup.add(makeRocks(track));
   worldGroup.add(makeRamps(track));
@@ -67,7 +106,7 @@ function loadTrack(data) {
   worldGroup.add(makeGate(track, FINISH_S, 0x3050c0));
   worldGroup.add(makeCrowd(track, FINISH_S));
   const center = track.toWorld(track.length / 2, 0, 0);
-  worldGroup.add(makeSky(center), makeMountains(center), makeClouds(center));
+  worldGroup.add(makeSky(center), makeSun(center), makeMountains(center), makeClouds(center));
   scene.add(worldGroup);
   document.getElementById('track-name').textContent = `Pista ${data.name}`;
   window.__game.trackLength = track.length;
@@ -119,11 +158,48 @@ const hud = createHud();
 const controls = createControls();
 const snow = createSnowSound();
 
+const nameInput = document.getElementById('player-name');
+nameInput.value = playerName();
+let sessionName = '';
+const mobileControls = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+document.getElementById('btn-back-controls').textContent = mobileControls ? '‹ Nombre y controles' : '‹ Cambiar nombre';
+function showNameForm() {
+  document.getElementById('player-form').hidden = false;
+  document.getElementById('control-panel').hidden = true;
+  nameInput.focus();
+}
+document.getElementById('player-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const name = nameInput.value.trim().slice(0, 12);
+  if (!name) {
+    document.getElementById('name-error').textContent = 'Escribe tu nombre para continuar.';
+    nameInput.setAttribute('aria-invalid', 'true');
+    nameInput.focus();
+    return;
+  }
+  sessionName = name;
+  savePlayerName(name);
+  nameInput.value = name;
+  nameInput.removeAttribute('aria-invalid');
+  document.getElementById('name-error').textContent = '';
+  nameInput.blur();
+  if (!mobileControls) {
+    chooseControl('touch');
+    return;
+  }
+  document.getElementById('player-form').hidden = true;
+  document.getElementById('control-panel').hidden = false;
+  document.getElementById('btn-touch').focus();
+});
+document.getElementById('btn-edit-name').addEventListener('click', showNameForm);
+
 document.getElementById('btn-touch').addEventListener('click', () => chooseControl('touch'));
 document.getElementById('btn-gyro').addEventListener('click', () => chooseControl('gyro'));
 document.getElementById('btn-back-controls').addEventListener('click', () => {
   document.getElementById('track-screen').classList.remove('visible');
   document.getElementById('start-screen').classList.add('visible');
+  showNameForm();
 });
 document.getElementById('btn-restart').addEventListener('click', restart);
 document.getElementById('btn-pause').addEventListener('click', pauseGame);
@@ -196,7 +272,7 @@ async function showRanking() {
   const sections = await Promise.all(Object.entries(TRACKS).map(async ([key, data]) => {
     try {
       const [rows, mine] = await Promise.all([fetchTop(data.name, 3), fetchMyRank(data.name)]);
-      return `<div class="rank-track rank-click" data-track="${key}">`
+      return `<div class="rank-track rank-click" data-track="${key}" role="button" tabindex="0">`
         + `<h2>${data.emoji} ${data.name}<small>ver todo ›</small></h2>`
         + rankRowsHtml(rows, mine, me) + '</div>';
     } catch {
@@ -207,6 +283,12 @@ async function showRanking() {
   list.innerHTML = sections.join('');
   for (const el of list.querySelectorAll('.rank-click')) {
     el.addEventListener('click', () => showTrackRanking(el.dataset.track));
+    el.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showTrackRanking(el.dataset.track);
+      }
+    });
   }
 }
 
@@ -258,6 +340,7 @@ function trackMeta(key) {
 function buildTrackMenu() {
   const list = document.getElementById('track-list');
   list.innerHTML = '';
+  document.getElementById('player-greeting').textContent = `${sessionName}, elige una pista para empezar.${mobileControls ? '' : ' Gira con las flechas ← → · Pausa con Esc.'}`;
   for (const [key, data] of Object.entries(TRACKS)) {
     const m = trackMeta(key);
     const best = loadBest(localStorage, data.name);
@@ -266,12 +349,13 @@ function buildTrackMenu() {
     card.dataset.track = key;
     card.style.setProperty('--accent', data.accent);
     card.innerHTML = `
-      <span class="track-emoji">${data.emoji}</span>
-      <span>
-        <span class="track-title">${data.name}<small>${data.difficulty}</small></span>
-        <span class="track-stats">${m.length} m · ${m.slope}% pendiente · ${m.obstacles} obstáculos · ${m.jumps} saltos</span>
-        ${best == null ? '' : `<span class="track-best">Mejor tiempo: ${formatTime(best)}</span>`}
-      </span>`;
+      <span class="track-top"><span class="track-emoji">${data.emoji}</span><span class="track-level">${data.difficulty}</span></span>
+      <svg class="track-preview" viewBox="0 0 240 72" aria-hidden="true"><path d="M0 72 52 14 85 48 136 0 204 72Z" fill="#ffffff09"/><path d="m92 72 75-49 73 49Z" fill="#ffffff08"/><path d="M125 6 C80 18 155 26 113 39 S65 57 120 67" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/><circle cx="125" cy="6" r="4" fill="#fff"/><circle cx="120" cy="67" r="4" fill="#fff"/></svg>
+      <span class="track-title">${data.name}</span>
+      ${data.description ? `<span class="track-description">${data.description}</span>` : ''}
+      <span class="track-stats">${m.length} m · ${m.slope}% pendiente<br>${m.obstacles} obstáculos · ${m.jumps} saltos</span>
+      <span class="track-best">${best == null ? 'Sin tiempo todavía' : `Récord: ${formatTime(best)}`}</span>
+      <span class="track-play">Bajar ↗</span>`;
     card.addEventListener('click', () => startRun(key));
     list.appendChild(card);
   }
@@ -279,6 +363,7 @@ function buildTrackMenu() {
 
 // Paso 1: elegir control (aquí se pide el permiso del giroscopio, dentro del gesto).
 function chooseControl(mode) {
+  if (!sessionName) return;
   snow.start();
   snow.playMenu();
   controls.setMode(mode).then((ok) => {
@@ -287,6 +372,7 @@ function chooseControl(mode) {
   hud.hideStart();
   buildTrackMenu();
   document.getElementById('track-screen').classList.add('visible');
+  document.querySelector('.track-card')?.focus({ preventScroll: true });
 }
 
 // Paso 2: elegir pista y bajar.
@@ -300,6 +386,7 @@ function startRun(key) {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (e.target?.closest?.('input, textarea, [contenteditable]')) return;
   if (e.key === 'Escape' || e.key.toLowerCase() === 'p') {
     if (paused) resumeGame();
     else pauseGame();
@@ -364,63 +451,6 @@ function autopilotSteer() {
   return Math.max(-1, Math.min(1, steerFF + (headingTarget - player.heading) * 3));
 }
 
-// Entrada de nombre estilo arcade: 3 iniciales con teclado en pantalla.
-let initials = [];
-
-function renderSlots() {
-  const slots = document.querySelectorAll('#initial-slots .slot');
-  slots.forEach((slot, i) => {
-    slot.textContent = initials[i] || '';
-    slot.classList.toggle('active', i === Math.min(initials.length, 7));
-  });
-  const ok = document.querySelector('#letter-grid .key-ok');
-  if (ok) ok.disabled = initials.length < 3; // mínimo 3 letras, máximo 8
-}
-
-function buildLetterGrid() {
-  const grid = document.getElementById('letter-grid');
-  if (grid.childElementCount) return;
-  const key = (label, onTap, cls = '') => {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (cls) b.className = cls;
-    b.addEventListener('click', onTap);
-    grid.appendChild(b);
-  };
-  for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
-    key(ch, () => {
-      if (initials.length < 8) initials.push(ch);
-      renderSlots();
-    });
-  }
-  key('←', () => {
-    initials.pop();
-    renderSlots();
-  }, 'key-del');
-  key('OK', () => {
-    if (initials.length < 3) return;
-    const name = initials.join('');
-    savePlayerName(name);
-    document.getElementById('submit-box').style.display = 'none';
-    sendScore(name);
-  }, 'key-ok');
-}
-
-function offerRankingSubmit() {
-  const box = document.getElementById('submit-box');
-  document.getElementById('submit-status').textContent = '';
-  const saved = playerName();
-  if (saved) {
-    box.style.display = 'none';
-    sendScore(saved);
-  } else {
-    buildLetterGrid();
-    initials = [];
-    renderSlots();
-    box.style.display = 'flex';
-  }
-}
-
 function sendScore(name) {
   const status = document.getElementById('submit-status');
   const best = loadBest(localStorage, track.data.name);
@@ -440,8 +470,8 @@ function finish() {
   const recordEligible = TIMESCALE === 1 && !AUTOPILOT;
   const isRecord = recordEligible ? saveBest(localStorage, track.data.name, time) : false;
   if (recordEligible) saveBestSpeed(localStorage, track.data.name, maxKmh);
-  if (recordEligible) offerRankingSubmit();
-  else document.getElementById('submit-box').style.display = 'none';
+  document.getElementById('submit-status').textContent = '';
+  if (recordEligible && sessionName) sendScore(sessionName);
   const best = loadBest(localStorage, track.data.name);
   const bestSpeed = loadBestSpeed(localStorage, track.data.name);
   document.getElementById('finish-track').textContent = `Pista ${track.data.name}`;
@@ -467,9 +497,19 @@ function updateCamera() {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
+  // El volumen de sombra viaja con el jugador, centrado un poco por delante
+  // (es donde mira la cámara), manteniendo el mismo ángulo de sol.
+  const focus = track.toWorld(player.s + 45, player.lat, 0);
+  sun.target.position.copy(focus);
+  // Sol bajo sobre el horizonte: rasante sobre la nieve, sombras largas.
+  sun.position.set(focus.x + 100, focus.y + 54, focus.z - 30);
+
   skis.visible = !player.fallen;
-  skis.rotation.z = steerSmooth * 0.35;   // canteo al girar
-  skis.rotation.y = steerSmooth * 0.12;   // las puntas apuntan hacia el giro
+  // Canteo individual: cada esquí rota sobre su propio eje longitudinal, los dos
+  // hacia el mismo lado. El grupo no rota, así no se balancean como una tabla.
+  skis.rotation.z = 0;
+  skis.rotation.y = 0;                    // sin guiñada: apuntan siempre al frente
+  for (const ski of skis.userData.skis) ski.rotation.z = steerSmooth * 0.6;
   skis.rotation.x = player.airborne ? 0.15 : 0;
   // El FOV se abre con la velocidad y estira la perspectiva de lo cercano:
   // compensamos la profundidad de los skis para que no parezcan alargarse.
@@ -511,13 +551,17 @@ function tick(now) {
     if (race.status === 'finished' && !finishShown) finish();
   }
 
-  // Animación del público (saltitos y brazos al aire)
+  // Saludos asimétricos y balanceo leve, con los pies apoyados en la nieve.
   const tSec = now / 1000;
   for (const c of crowd) {
-    const wave = Math.sin(tSec * 6 + c.phase);
-    c.arms[0].rotation.z = -2.4 + Math.abs(wave) * 0.7;
-    c.arms[1].rotation.z = 2.4 - Math.abs(wave) * 0.7;
-    c.fig.position.y = c.baseY + Math.max(0, wave) * 0.18;
+    const wave = Math.sin(tSec * 3.2 * c.energy + c.phase);
+    for (let i = 0; i < c.arms.length; i++) {
+      const arm = c.arms[i];
+      const raised = Math.abs(arm.userData.restAngle) > 1;
+      arm.rotation.z = arm.userData.restAngle + (raised ? 0.22 : 0.06) * Math.sin(tSec * 3.2 * c.energy + c.phase + i);
+      arm.rotation.x = (raised ? 0.12 : 0.035) * wave;
+    }
+    c.fig.rotation.z = wave * 0.012;
   }
 
   updateCamera();
@@ -537,7 +581,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-window.__game = { state: () => ({ player, race, paused }), trackLength: 0, openSubmit: () => offerRankingSubmit() };
+window.__game = { state: () => ({ player, race, paused }), trackLength: 0 };
 loadTrack(TRACKS[selectedTrack]);
 
 // Los runs de verificación (autopilot) saltan los menús y arrancan directos.
@@ -572,40 +616,153 @@ function makeSky(center) {
   return mesh;
 }
 
-// Cordillera nevada low-poly en anillo alrededor de la pista.
+// Dos cordilleras continuas: crestas erosionadas, valles y laderas asimétricas.
+// La malla y su iluminación se calculan al cargar la pista, sin trabajo por frame.
 function makeMountains(center) {
+  const group = new THREE.Group();
   const rng = mulberry32(2024);
-  const peaks = [];
-  const count = 16;
-  for (let i = 0; i < count; i++) {
-    const angle = (i / count) * Math.PI * 2 + (rng() - 0.5) * 0.3;
-    const dist = 700 + rng() * 350;
-    const height = 180 + rng() * 220;
-    const radius = height * (0.7 + rng() * 0.4);
-    const peak = new THREE.ConeGeometry(radius, height, 5 + Math.floor(rng() * 3));
-    peak.rotateY(rng() * Math.PI);
-    peak.translate(
-      center.x + Math.cos(angle) * dist,
-      center.y - 60 + height / 2,
-      center.z + Math.sin(angle) * dist,
-    );
-    peaks.push(peak);
+  const sunDirection = new THREE.Vector3(110, 58, -34).normalize();
+  const snowColor = new THREE.Color(0xf0f4f7);
+  const rockColor = new THREE.Color(0x777d86);
+  const hazeColor = new THREE.Color(0xc2d5e6);
+  const shadeColor = new THREE.Color(0x7895b7);
+  const sunColor = new THREE.Color(0xffefd6);
+  for (let layer = 0; layer < 2; layer++) {
+    const columns = LOW_END ? 256 : 512;
+    const rows = LOW_END ? 32 : 64;
+    const innerRadius = layer === 0 ? 630 : 1080;
+    const depth = layer === 0 ? 530 : 620;
+    const peaks = Array.from({ length: layer === 0 ? 13 : 17 }, (_, i) => ({
+      angle: (i + rng() * 0.6) / (layer === 0 ? 13 : 17) * Math.PI * 2,
+      height: 170 + rng() * 230 + layer * 90,
+      width: 0.10 + rng() * 0.12,
+    }));
+    if (layer === 1) {
+      // Cumbre lejana a la derecha de la salida: más baja y con laderas
+      // amplias para que no sobresalga como una aguja sobre la cordillera.
+      for (const index of [15, 16]) {
+        const rightSummit = peaks[index];
+        rightSummit.height *= 0.60;
+        rightSummit.width *= 1.35;
+      }
+    }
+    const positions = [];
+    const indices = [];
+    for (let row = 0; row <= rows; row++) {
+      const t = row / rows;
+      const radius = innerRadius + t * depth;
+      for (let col = 0; col <= columns; col++) {
+        const angle = (col % columns) / columns * Math.PI * 2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        let summit = 80;
+        for (const peak of peaks) {
+          const delta = Math.atan2(Math.sin(angle - peak.angle), Math.cos(angle - peak.angle));
+          summit += peak.height * Math.exp(-Math.pow(delta / peak.width, 2));
+        }
+        // La cresta cambia de posición para evitar una cadena de conos idénticos.
+        const crest = 0.40 + 0.14 * Math.sin(angle * 5 + layer);
+        const profile = t < crest ? t / crest : (1 - t) / (1 - crest);
+        const envelope = Math.pow(Math.max(0, profile), 1.15);
+        const warp = valueNoise(x * 0.003 + 51, z * 0.003 + 29) * 70;
+        let erosion = 0;
+        let amplitude = 70;
+        let frequency = 0.008;
+        for (let octave = 0; octave < 5; octave++) {
+          const ridge = 1 - Math.abs(2 * valueNoise(
+            (x + warp) * frequency + layer * 83,
+            (z - warp) * frequency + octave * 19,
+          ) - 1);
+          erosion += (ridge * ridge - 0.45) * amplitude;
+          amplitude *= 0.48;
+          frequency *= 2.1;
+        }
+        const height = -145 + envelope * (summit + erosion);
+        positions.push(center.x + x, center.y + height, center.z + z);
+      }
+    }
+    const stride = columns + 1;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < columns; col++) {
+        const k = row * stride + col;
+        indices.push(k, k + 1, k + stride, k + 1, k + stride + 1, k + stride);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    const normals = geometry.getAttribute('normal');
+    // Ambos extremos del anillo comparten la normal para cerrar sin costuras.
+    for (let row = 0; row <= rows; row++) {
+      const first = row * stride;
+      const last = first + columns;
+      const normal = new THREE.Vector3().fromBufferAttribute(normals, first)
+        .add(new THREE.Vector3().fromBufferAttribute(normals, last)).normalize();
+      normals.setXYZ(first, normal.x, normal.y, normal.z);
+      normals.setXYZ(last, normal.x, normal.y, normal.z);
+    }
+    const colors = [];
+    const color = new THREE.Color();
+    const light = new THREE.Color();
+    const normal = new THREE.Vector3();
+    for (let i = 0; i < positions.length / 3; i++) {
+      const x = positions[i * 3] - center.x;
+      const height = positions[i * 3 + 1] - center.y;
+      const z = positions[i * 3 + 2] - center.z;
+      normal.fromBufferAttribute(normals, i);
+      const weather = valueNoise(x * 0.035 + 92, z * 0.035 + 13);
+      // La roca aflora en paredes empinadas; la nieve llena canales y terrazas.
+      const snowLine = THREE.MathUtils.smoothstep(height + weather * 65, -30, 160);
+      const accumulation = THREE.MathUtils.smoothstep(normal.y + weather * 0.16, 0.48, 0.88);
+      const snow = snowLine * accumulation;
+      color.copy(rockColor).multiplyScalar(0.82 + weather * 0.30).lerp(snowColor, snow);
+      const sunlight = Math.max(0, normal.dot(sunDirection));
+      light.copy(shadeColor).lerp(sunColor, Math.pow(sunlight, 0.7));
+      color.multiply(light).multiplyScalar(0.68 + sunlight * 0.55);
+      // Bruma después de iluminar: los macizos lejanos pierden contraste.
+      const haze = (layer === 0 ? 0.12 : 0.38)
+        + (1 - THREE.MathUtils.smoothstep(height, -145, 260)) * 0.24;
+      color.lerp(hazeColor, haze);
+      colors.push(color.r, color.g, color.b);
+    }
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    group.add(new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+      vertexColors: true, fog: false,
+    })));
   }
-  const mesh = new THREE.Mesh(
-    mergeGeometries(peaks),
-    // Emisivo azulado: levanta las caras en sombra como nieve iluminada por el cielo.
-    new THREE.MeshLambertMaterial({
-      color: 0xf2f7fd,
-      emissive: 0x8ba4c2,
-      emissiveIntensity: 0.45,
-      flatShading: true,
-      fog: false,
-    }),
-  );
-  return mesh;
+  return group;
 }
 
 // Nubes: racimos de esferas aplastadas, blancas y mate.
+// Disco solar con halo: un sprite de degradé radial colocado lejos en la
+// dirección de la luz. Da un punto de anclaje a la iluminación de la escena.
+function makeSun(center) {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d');
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0.00, 'rgba(255, 255, 250, 1)');
+  grad.addColorStop(0.12, 'rgba(255, 249, 226, 1)');
+  grad.addColorStop(0.26, 'rgba(255, 238, 190, 0.55)');
+  grad.addColorStop(0.55, 'rgba(255, 232, 180, 0.16)');
+  grad.addColorStop(1.00, 'rgba(255, 230, 175, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false, depthTest: false,
+    blending: THREE.AdditiveBlending, fog: false,
+  }));
+  const dir = new THREE.Vector3(80, 120, -40).normalize();
+  sprite.position.copy(center).addScaledVector(dir, 1500);
+  sprite.scale.setScalar(340);
+  sprite.renderOrder = -1; // detrás de todo lo sólido
+  return sprite;
+}
+
 function makeClouds(center) {
   const rng = mulberry32(31);
   const puffs = [];
@@ -632,81 +789,312 @@ function makeClouds(center) {
       puffs.push(puff);
     }
   }
-  // Blanco plano sin sombreado: lectura limpia de nube de dibujo animado.
+  // Nubes sombreadas: horneamos la luz en color de vértice — brillante arriba
+  // (cara al sol), gris azulado en la panza. Sin esto son manchas blancas
+  // planas; con esto tienen volumen. Translúcidas en los bordes.
+  const merged = mergeGeometries(puffs);
+  const nor = merged.getAttribute('normal');
+  const top = new THREE.Color(0xfffdf8);
+  const belly = new THREE.Color(0xa8bcd4);
+  const colors = new Float32Array(nor.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < nor.count; i++) {
+    const up = nor.getY(i) * 0.5 + 0.5; // -1..1 → 0..1
+    c.copy(belly).lerp(top, Math.pow(up, 0.8));
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+  merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return new THREE.Mesh(
-    mergeGeometries(puffs),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }),
+    merged,
+    new THREE.MeshBasicMaterial({
+      vertexColors: true, fog: false, transparent: true, opacity: 0.92, depthWrite: false,
+    }),
   );
 }
 
-// Textura de nieve procedural: gránulos y manchas suaves sobre blanco.
-function makeSnowTexture() {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const g = canvas.getContext('2d');
-  g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, size, size);
-  const rng = mulberry32(99);
-  // Dibuja en las 9 posiciones envueltas para que la textura repita sin costuras.
-  const wrapped = (draw) => {
-    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) draw(ox, oy);
+// Albedo, normales y rugosidad nacen del mismo relieve: cada grano responde
+// a la luz donde se ve, y los surcos solo aparecen en la nieve compactada.
+function makeSnowSurface(groomed) {
+  const size = LOW_END ? 256 : 512;
+  const rng = mulberry32(groomed ? 1771 : 2991);
+  const height = new Float32Array(size * size);
+  const grain = new Float32Array(size * size);
+  // Ruido periódico suave: el valor y su pendiente coinciden al repetir el mapa.
+  const noise = (u, v, frequency, offset) => {
+    const x = u * frequency;
+    const y = v * frequency;
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    const fx = x - ix;
+    const fy = y - iy;
+    const a = fx * fx * (3 - 2 * fx);
+    const b = fy * fy * (3 - 2 * fy);
+    const at = (dx, dy) => valueNoise(
+      ((ix + dx) % frequency) + offset, ((iy + dy) % frequency) + offset,
+    );
+    return THREE.MathUtils.lerp(
+      THREE.MathUtils.lerp(at(0, 0), at(1, 0), a),
+      THREE.MathUtils.lerp(at(0, 1), at(1, 1), a), b,
+    );
   };
-  for (let i = 0; i < 60; i++) { // manchas anchas y tenues (ondulaciones)
-    const x = rng() * size;
-    const y = rng() * size;
-    const r = 20 + rng() * 40;
-    wrapped((ox, oy) => {
-      const grad = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
-      grad.addColorStop(0, 'rgba(185, 200, 222, 0.07)');
-      grad.addColorStop(1, 'rgba(185, 200, 222, 0)');
-      g.fillStyle = grad;
-      g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
-    });
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const v = y / size;
+      const i = y * size + x;
+      const broad = noise(u, v, 8, 17);
+      const fine = noise(u, v, 32, 71);
+      grain[i] = rng();
+      // Baldosa de 4 m: surcos de 8,3 cm, atenuados en zonas ya pisadas.
+      const wear = noise(u, v, 4, 139);
+      const grooves = Math.cos(u * Math.PI * 2 * 48 + 0.35 * Math.sin(v * Math.PI * 2));
+      height[i] = (broad - 0.5) * (groomed ? 0.026 : 0.038)
+        + (fine - 0.5) * 0.006 + (grain[i] - 0.5) * 0.0015
+        + (groomed ? grooves * 0.002 * THREE.MathUtils.smoothstep(wear, 0.2, 0.75) : 0);
+    }
   }
-  for (let i = 0; i < 1600; i++) { // gránulos finos
-    const a = 0.05 + rng() * 0.09;
-    const x = rng() * size;
-    const y = rng() * size;
-    const s = 0.6 + rng() * 1.5;
-    g.fillStyle = `rgba(140, 165, 200, ${a})`;
-    wrapped((ox, oy) => g.fillRect(x + ox, y + oy, s, s));
+  const canvases = Array.from({ length: 3 }, () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    return canvas;
+  });
+  const contexts = canvases.map((c) => c.getContext('2d'));
+  const [albedo, normal, roughness] = contexts.map((c) => c.createImageData(size, size));
+  const at = (x, y) => height[((y + size) % size) * size + ((x + size) % size)];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      const o = i * 4;
+      // Derivadas en metros; la intensidad no cambia con la calidad del mapa.
+      const dx = (at(x + 1, y) - at(x - 1, y)) * size / 8;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * size / 8;
+      const length = Math.hypot(dx, dy, 1);
+      normal.data.set([
+        (0.5 - dx / length * 0.5) * 255,
+        // CanvasTexture invierte Y al subirse a la GPU.
+        (0.5 + dy / length * 0.5) * 255,
+        (0.5 + 0.5 / length) * 255, 255,
+      ], o);
+      const shade = Math.min(1, Math.max(0, 0.5 + height[i] * 16));
+      const white = 231 + shade * 16 + grain[i] * 4;
+      albedo.data.set([white - 4, white - 1, Math.min(255, white + 3), 255], o);
+      // Cristales aislados más lisos, sin puntos blancos pintados ni metal.
+      const r = grain[i] > 0.985 ? 130 : 211 + grain[i] * 32;
+      roughness.data.set([r, r, r, 255], o);
+    }
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
+  const textures = canvases.map((canvas, i) => {
+    contexts[i].putImageData([albedo, normal, roughness][i], 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = Math.min(LOW_END ? 4 : 8, renderer.capabilities.getMaxAnisotropy());
+    return texture;
+  });
+  textures[0].colorSpace = THREE.SRGBColorSpace;
+  return { map: textures[0], normalMap: textures[1], roughnessMap: textures[2] };
 }
 
-function makeRibbon(track, latA, latB, color, drop, map) {
-  const rows = 400;
+// Ruido de valor 2D: hash determinista por celda entera + interpolación suave.
+// A diferencia de una suma de senos, no es periódico, así que no dibuja una
+// rejilla reconocible sobre la nieve.
+function valueNoise(x, y) {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const xf = x - xi;
+  const yf = y - yi;
+  const hash = (a, b) => {
+    let h = Math.imul(a, 374761393) ^ Math.imul(b, 668265263);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+  const fade = (t) => t * t * (3 - 2 * t); // smoothstep: sin aristas entre celdas
+  const u = fade(xf);
+  const v = fade(yf);
+  const n00 = hash(xi, yi);
+  const n10 = hash(xi + 1, yi);
+  const n01 = hash(xi, yi + 1);
+  const n11 = hash(xi + 1, yi + 1);
+  return (n00 * (1 - u) + n10 * u) * (1 - v) + (n01 * (1 - u) + n11 * u) * v;
+}
+
+// Relieve amplio y suave en la pista, con nieve acumulada fuera de sus bordes.
+// El detalle inferior a la resolución de la malla vive en el mapa de normales.
+function snowRelief(s, lat, width) {
+  const n = (fs, fl, off) => valueNoise(s * fs + off, lat * fl + off) - 0.5;
+  const edge = THREE.MathUtils.smoothstep(Math.abs(lat), width / 2, width / 2 + 3);
+  return 0.025 * n(0.24, 0.4, 0)
+    + edge * (0.13 + 0.12 * n(0.35, 0.7, 37) + 0.055 * n(0.9, 1.1, 91));
+}
+
+function makeRibbon(track, latA, latB, surface) {
+  const rows = 900; // relieve amplio; el grano fino se resuelve en la textura
   const TEX_METERS = 4; // la textura se repite cada 4 m en ambos ejes
+  // Subdivisión lateral: sin ella la pista es una tira plana de 2 vértices por
+  // fila y la luz rasante no tiene nada donde quebrarse. Con relieve real, el
+  // sol bajo dibuja sombras largas como en la nieve de verdad.
+  const cols = Math.max(2, Math.round((latB - latA) / 0.6));
   const pos = [];
   const uv = [];
+  const colors = [];
   const idx = [];
   for (let i = 0; i <= rows; i++) {
     const s = (i / rows) * track.length;
-    const a = track.toWorld(s, latA, -drop);
-    const b = track.toWorld(s, latB, -drop);
-    pos.push(a.x, a.y, a.z, b.x, b.y, b.z);
-    uv.push(latA / TEX_METERS, s / TEX_METERS, latB / TEX_METERS, s / TEX_METERS);
+    for (let j = 0; j <= cols; j++) {
+      const lat = latA + ((latB - latA) * j) / cols;
+      // El relieve NO se desvanece por columna (eso creaba un escalón donde se
+      // juntan pista y franja lateral). Es continuo en `lat`, así ambas cintas
+      // calculan exactamente la misma altura en el borde compartido y encajan.
+      // El borde exterior se entierra en la ladera; nunca queda una lámina abierta.
+      const skirt = THREE.MathUtils.smoothstep(Math.abs(lat) - track.width / 2, 17, 25) * 4;
+      const h = snowRelief(s, lat, track.width) - skirt;
+      const w = track.toWorld(s, lat, h);
+      // Variación a escala de metros, independiente de la baldosa repetida.
+      const shade = 0.91 + valueNoise(s * 0.12 + 48, lat * 0.21) * 0.09;
+      colors.push(shade * 0.98, shade * 0.99, shade);
+      pos.push(w.x, w.y, w.z);
+      uv.push(lat / TEX_METERS, s / TEX_METERS);
+    }
   }
+  const stride = cols + 1;
   for (let i = 0; i < rows; i++) {
-    const k = i * 2;
-    idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+    for (let j = 0; j < cols; j++) {
+      const k = i * stride + j;
+      idx.push(k, k + 1, k + stride + 1, k, k + stride + 1, k + stride);
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
-  return new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, map, side: THREE.DoubleSide }));
+  // Nieve PBR: muy rugosa (difusa) pero con algo de especular, que es lo que
+  // da el brillo granulado al contraluz. El normal map crea el relieve.
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    ...surface,
+    normalScale: new THREE.Vector2(1, 1),
+    roughness: 1,
+    metalness: 0.0,
+    envMapIntensity: 0.7,
+    side: THREE.DoubleSide,
+    // Con DoubleSide, three.js sombrea usando las caras traseras y la pista se
+    // auto-sombrea entera (se veía un rectángulo pálido sobre la nieve).
+    // Forzar la cara frontal deja solo las sombras reales de los objetos.
+    shadowSide: THREE.FrontSide,
+  }));
+  // Pigmento integrado en la nieve: conserva grano, relieve y sombras, sin
+  // otra malla que pueda flotar o parpadear sobre la superficie en las curvas.
+  mesh.material.onBeforeCompile = (shader) => {
+    shader.uniforms.sprayHalfWidth = { value: track.width / 2 };
+    shader.uniforms.sprayColor = { value: new THREE.Color(0x50bced) };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vSprayCoord;')
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\nvSprayCoord = uv * 4.0;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec2 vSprayCoord;
+        uniform float sprayHalfWidth;
+        uniform vec3 sprayColor;
+        float sprayNoise(vec2 p) {
+          vec2 cell = floor(p), f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          vec4 dots = vec4(dot(cell, vec2(127.1, 311.7)))
+            + vec4(0.0, 127.1, 311.7, 438.8);
+          vec4 n = fract(sin(dots) * 43758.5453);
+          return mix(mix(n.x, n.y, f.x), mix(n.z, n.w, f.x), f.y);
+        }
+      `)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        // El centro sigue el límite real; el aerosol varía en ancho y densidad.
+        float flow = sprayNoise(vec2(vSprayCoord.y * 0.7, sign(vSprayCoord.x) * 7.0));
+        float distanceToEdge = abs(abs(vSprayCoord.x) - sprayHalfWidth);
+        float sprayWidth = mix(0.28, 0.43, flow);
+        float feather = 1.0 - smoothstep(0.06, sprayWidth, distanceToEdge);
+        float grain = sprayNoise(vSprayCoord * vec2(65.0, 24.0));
+        float pigment = feather * mix(0.65, 0.95, flow) * mix(0.68, 1.0, grain);
+        diffuseColor.rgb *= mix(vec3(1.0), sprayColor, pigment);
+      `);
+  };
+  mesh.material.customProgramCacheKey = () => 'snow-edge-spray-v1';
+  mesh.receiveShadow = true; // la pista recibe las sombras de árboles y rocas
+  return mesh;
+}
+
+// Terreno de fondo en coordenadas del mundo: una cuadrícula evita los pliegues
+// que produciría ensanchar cientos de metros las cintas en las curvas cerradas.
+function makeSurroundingTerrain(track) {
+  const samples = [];
+  const count = Math.ceil(track.length / 5);
+  for (let i = 0; i <= count; i++) samples.push(track.frameAt(i / count * track.length).pos);
+  const margin = 900;
+  const minX = Math.min(...samples.map((p) => p.x)) - margin;
+  const maxX = Math.max(...samples.map((p) => p.x)) + margin;
+  const minZ = Math.min(...samples.map((p) => p.z)) - margin;
+  const maxZ = Math.max(...samples.map((p) => p.z)) + margin;
+  const spacing = LOW_END ? 12 : 8;
+  const columns = Math.ceil((maxX - minX) / spacing);
+  const rows = Math.ceil((maxZ - minZ) / spacing);
+  const positions = [];
+  const colors = [];
+  const uv = [];
+  const indices = [];
+  for (let row = 0; row <= rows; row++) {
+    const z = minZ + row / rows * (maxZ - minZ);
+    for (let col = 0; col <= columns; col++) {
+      const x = minX + col / columns * (maxX - minX);
+      let distanceSquared = Infinity;
+      let baseHeight = 0;
+      // Proyección sobre segmentos, no sobre puntos: evita escalones de altura.
+      for (let i = 0; i < samples.length - 1; i++) {
+        const a = samples[i];
+        const b = samples[i + 1];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const t = THREE.MathUtils.clamp(((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz), 0, 1);
+        const d2 = (x - a.x - t * dx) ** 2 + (z - a.z - t * dz) ** 2;
+        if (d2 < distanceSquared) {
+          distanceSquared = d2;
+          baseHeight = THREE.MathUtils.lerp(a.y, b.y, t);
+        }
+      }
+      const distance = Math.sqrt(distanceSquared);
+      const hills = THREE.MathUtils.smoothstep(distance, track.width / 2 + 35, 220);
+      const relief = 12 + valueNoise(x * 0.006 + 73, z * 0.006 + 41) * 65;
+      // Margen vertical para que los triángulos del terreno no corten la pista
+      // al interpolar sus cambios de pendiente. La falda lateral cubre la unión.
+      positions.push(x, baseHeight - 2.5 + hills * relief, z);
+      uv.push(x / 4, z / 4);
+      const shade = 0.92 + valueNoise(x * 0.04, z * 0.04) * 0.08;
+      colors.push(shade * 0.98, shade * 0.99, shade);
+    }
+  }
+  const stride = columns + 1;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      const k = row * stride + col;
+      indices.push(k, k + stride, k + 1, k + 1, k + stride, k + stride + 1);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const terrain = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+    ...powderSnow, vertexColors: true, roughness: 1, metalness: 0,
+  }));
+  terrain.receiveShadow = true;
+  return terrain;
 }
 
 // Une varias geometrías (pequeñas) en una sola, para copas por pisos.
 function mergeGeometries(geometries) {
-  const parts = geometries.map((g) => g.toNonIndexed());
+  const parts = geometries.map((g) => g.index ? g.toNonIndexed() : g);
   let floats = 0;
   for (const g of parts) floats += g.getAttribute('position').array.length;
   const pos = new Float32Array(floats);
@@ -723,57 +1111,120 @@ function mergeGeometries(geometries) {
   return out;
 }
 
-// Dos especies: abeto clásico (ancho) y abeto alto de verde oscuro con copa en pisos.
-// Función (no const) para que esté disponible al construir la escena al cargar el módulo.
+// Abetos alpinos: ramas radiales descendentes, huecos entre pisos y una guía
+// central estrecha. Cada especie comparte geometría entre todos sus ejemplares.
 function treeSpecies() {
-  const tallFoliage = mergeGeometries([
-    new THREE.ConeGeometry(1.35, 3.2, 8).translate(0, 1.2, 0),
-    new THREE.ConeGeometry(1.05, 2.8, 8).translate(0, 3.0, 0),
-    new THREE.ConeGeometry(0.7, 2.4, 8).translate(0, 4.8, 0),
-  ]);
-  return {
-    standard: {
-      foliageGeo: new THREE.ConeGeometry(1.6, 4.5, 8),
-      foliageColor: 0x1d5c33,
-      foliageY: 2.8,
-      trunkGeo: new THREE.CylinderGeometry(0.25, 0.3, 1.6, 6),
-      trunkColor: 0x5a3d24,
-      trunkY: 0.8,
-    },
-    tall: {
-      foliageGeo: tallFoliage,
-      foliageColor: 0x0e3a1f,
-      foliageY: 1.4, // la copa por pisos arranca sobre el tronco (offsets ya en la geometría)
-      trunkGeo: new THREE.CylinderGeometry(0.16, 0.22, 2.4, 6),
-      trunkColor: 0x4a3220,
-      trunkY: 1.2,
-    },
+  const build = (height, radius, seed) => {
+    const rng = mulberry32(seed);
+    const positions = [];
+    const tiers = LOW_END ? 7 : 10;
+    const branches = LOW_END ? 6 : 8;
+    const triangle = (a, b, c) => positions.push(...a, ...c, ...b);
+    for (let tier = 0; tier < tiers; tier++) {
+      const t = tier / tiers;
+      const y = 1.25 + t * (height - 1.5);
+      const span = radius * Math.pow(1 - t, 0.85);
+      const phase = rng() * Math.PI * 2;
+      for (let branch = 0; branch < branches; branch++) {
+        const angle = phase + branch / branches * Math.PI * 2 + (rng() - 0.5) * 0.22;
+        const length = span * (0.75 + rng() * 0.3);
+        const width = length * (0.30 + rng() * 0.10);
+        const rootY = y + (rng() - 0.5) * 0.22;
+        const rings = [];
+        for (let section = 0; section <= 4; section++) {
+          const u = section / 4;
+          const w = width * [0.15, 0.9, 1, 0.6, 0.015][section];
+          const h = length * [0.18, 0.32, 0.23, 0.12, 0.005][section];
+          const droop = -length * 0.25 * u + Math.pow(u, 5) * length * 0.12;
+          const point = (side, lift) => [
+            Math.cos(angle) * length * u - Math.sin(angle) * side,
+            rootY + droop + lift,
+            Math.sin(angle) * length * u + Math.cos(angle) * side,
+          ];
+          rings.push([point(-w, 0), point(0, h), point(w, 0), point(0, -h * 0.45)]);
+        }
+        for (let section = 0; section < rings.length - 1; section++) {
+          for (let face = 0; face < 4; face++) {
+            const next = (face + 1) % 4;
+            triangle(rings[section][face], rings[section + 1][face], rings[section][next]);
+            triangle(rings[section][next], rings[section + 1][face], rings[section + 1][next]);
+          }
+        }
+      }
+    }
+    const branchGeometry = new THREE.BufferGeometry();
+    branchGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    branchGeometry.computeVertexNormals();
+    const leader = new THREE.ConeGeometry(0.14, 0.65, 7).translate(0, height - 0.48, 0);
+    const core = new THREE.ConeGeometry(radius * 0.35, height - 1.2, 9)
+      .translate(0, (height + 1.2) / 2 - 0.3, 0);
+    const foliageGeo = mergeGeometries([branchGeometry, core, leader]);
+    branchGeometry.dispose();
+    core.dispose();
+    leader.dispose();
+    const pos = foliageGeo.getAttribute('position');
+    const normals = foliageGeo.getAttribute('normal');
+    const colors = [];
+    const needles = new THREE.Color(seed === 81 ? 0x244638 : 0x304b36);
+    const snow = new THREE.Color(0xe4eff5);
+    const color = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const patch = valueNoise(pos.getX(i) * 3 + seed, pos.getZ(i) * 3 + pos.getY(i));
+      // Color real de nieve sobre las caras superiores; las acículas quedan
+      // oscuras debajo. No se multiplica blanco por verde ni se sobreexpone.
+      const cover = THREE.MathUtils.smoothstep(normals.getY(i), 0.25, 0.8)
+        * THREE.MathUtils.smoothstep(patch, 0.20, 0.65);
+      color.copy(needles).multiplyScalar(0.7 + patch * 0.55).lerp(snow, cover);
+      colors.push(color.r, color.g, color.b);
+    }
+    foliageGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    const trunkGeo = new THREE.CylinderGeometry(0.045, 0.20, height - 0.3, 9, 5);
+    const trunkPos = trunkGeo.getAttribute('position');
+    const bark = [];
+    const barkColor = new THREE.Color(0x665343);
+    for (let i = 0; i < trunkPos.count; i++) {
+      const grain = valueNoise(trunkPos.getX(i) * 44 + 8, trunkPos.getZ(i) * 44 + 17);
+      color.copy(barkColor).multiplyScalar(0.65 + grain * 0.65);
+      bark.push(color.r, color.g, color.b);
+    }
+    trunkGeo.setAttribute('color', new THREE.Float32BufferAttribute(bark, 3));
+    return { foliageGeo, trunkGeo, trunkY: (height - 0.3) / 2 };
   };
+  return { standard: build(5.7, 1.5, 42), tall: build(7.4, 1.25, 81) };
 }
 
 function buildTreeInstances(track, positions, species) {
   const foliage = new THREE.InstancedMesh(
     species.foliageGeo,
-    new THREE.MeshLambertMaterial({ color: species.foliageColor, flatShading: true }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96 }),
     positions.length,
   );
   const trunk = new THREE.InstancedMesh(
     species.trunkGeo,
-    new THREE.MeshLambertMaterial({ color: species.trunkColor }),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }),
     positions.length,
   );
-  const m = new THREE.Matrix4();
+  const matrix = new THREE.Matrix4();
+  const rotation = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
   const rng = mulberry32(1234);
   positions.forEach((p, i) => {
-    const w = track.toWorld(p.s, p.lat, 0);
-    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.foliageY * p.scale, w.z);
-    foliage.setMatrixAt(i, m);
-    m.makeScale(p.scale, p.scale, p.scale).setPosition(w.x, w.y + species.trunkY * p.scale, w.z);
-    trunk.setMatrixAt(i, m);
-    const v = 0.85 + rng() * 0.3; // variación sutil de tono por árbol
-    foliage.setColorAt(i, new THREE.Color(v, v, v));
+    const w = track.toWorld(p.s, p.lat, snowRelief(p.s, p.lat, track.width));
+    rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng() * Math.PI * 2);
+    scale.set(p.scale * (0.88 + rng() * 0.12), p.scale * (0.9 + rng() * 0.22), p.scale);
+    matrix.compose(w, rotation, scale);
+    foliage.setMatrixAt(i, matrix);
+    w.y += species.trunkY * scale.y;
+    matrix.compose(w, rotation, scale);
+    trunk.setMatrixAt(i, matrix);
+    const tone = 0.9 + rng() * 0.1;
+    foliage.setColorAt(i, new THREE.Color(tone, tone, tone));
   });
   if (foliage.instanceColor) foliage.instanceColor.needsUpdate = true;
+  foliage.castShadow = true;
+  foliage.receiveShadow = true;
+  trunk.castShadow = true;
+  trunk.receiveShadow = true;
   return [foliage, trunk];
 }
 
@@ -804,179 +1255,371 @@ function makeTrees(track) {
   return group;
 }
 
-// Ski como plancha continua: cuerpo recto, y en la punta una pala que sube con
-// curva suave, se ensancha un poco y remata redondeada (como un ski real).
+// Secciones indexadas: normales compartidas para un rocker y cantos suaves.
 function makeSkiGeometry() {
-  const zFront = 0.35;   // extremo trasero (bajo la cámara)
-  const length = 1.55;
-  const tipLen = 0.4;    // largo de la pala
-  const curveK = 2.2;    // subida de la punta (y = k/2 · d²)
-  const halfW = 0.055;
-  const thick = 0.03;
-  const N = 48;
-  const zTipStart = zFront - length + tipLen;
-
-  // Perfil por secciones: posición z, altura del eje y semiancho
-  const rows = [];
-  for (let i = 0; i <= N; i++) {
-    const z = zFront - (i / N) * length;
-    let y = 0;
-    let w = halfW;
-    if (z < zTipStart) {
-      const d = zTipStart - z;
-      const t = d / tipLen; // 0..1 dentro de la pala
-      y = (curveK / 2) * d * d;
-      let m = 1 + 0.3 * Math.sin(Math.PI * Math.min(1, t)); // la pala se ensancha
-      if (t > 0.75) m *= Math.sqrt(Math.max(0, 1 - ((t - 0.75) / 0.25) ** 2)); // remate redondeado
-      w = halfW * m;
+  const positions = [], uvs = [], indices = [];
+  const rows = 112;
+  // Una sección biselada separa la cubierta, el canto de acero y la base.
+  const section = [
+    [-0.94, 0.010], [-0.55, 0.014], [0, 0.015], [0.55, 0.014],
+    [0.94, 0.010], [1, 0.004], [1, -0.006], [0.94, -0.010],
+    [0, -0.011], [-0.94, -0.010], [-1, -0.006], [-1, 0.004],
+  ];
+  const stride = section.length + 1;
+  for (let i = 0; i <= rows; i++) {
+    // Muestreo coseno: más detalle en los remates redondos.
+    const t = (1 - Math.cos(Math.PI * i / rows)) / 2;
+    const rocker = Math.max(0, (t - 0.64) / 0.36);
+    const tail = Math.max(0, (0.10 - t) / 0.10);
+    const y = 0.39 * rocker ** 2.3 + 0.025 * tail ** 2;
+    let width = 0.076 + 0.027 * ((t - 0.4) / 0.6) ** 2;
+    // Nariz elíptica que cierra tangencialmente, sin un frente plano.
+    if (t > 0.91) width *= Math.sqrt(Math.max(0, 1 - ((t - 0.91) / 0.09) ** 2));
+    if (t < 0.035) width *= Math.sqrt(Math.max(0, 1 - ((0.035 - t) / 0.035) ** 2));
+    for (let j = 0; j <= section.length; j++) {
+      const [x, h] = section[j % section.length];
+      positions.push(x * width, y + h, 0.35 - t * 1.55);
+      uvs.push((x + 1) / 2, t);
     }
-    rows.push({ z, y, w });
   }
-
-  const pos = [];
-  const quad = (a, b, c, d) => pos.push(...a, ...b, ...c, ...a, ...c, ...d);
-  const corners = (r) => ({
-    tl: [-r.w, r.y + thick / 2, r.z], tr: [r.w, r.y + thick / 2, r.z],
-    bl: [-r.w, r.y - thick / 2, r.z], br: [r.w, r.y - thick / 2, r.z],
-  });
-  for (let i = 0; i < N; i++) {
-    const a = corners(rows[i]);
-    const b = corners(rows[i + 1]);
-    quad(a.tl, a.tr, b.tr, b.tl); // cara superior
-    quad(a.bl, b.bl, b.br, a.br); // cara inferior
-    quad(a.tl, b.tl, b.bl, a.bl); // canto izquierdo
-    quad(a.tr, a.br, b.br, b.tr); // canto derecho
+  const geometry = new THREE.BufferGeometry();
+  // Tres grupos, sin piezas superpuestas ni z-fighting.
+  for (let material = 0; material < 3; material++) {
+    const start = indices.length;
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < section.length; j++) {
+        const surface = j < 4 ? 0 : (j >= 7 && j <= 8 ? 2 : 1);
+        if (surface !== material) continue;
+        const a = i * stride + j, b = a + stride;
+        indices.push(a, a + 1, b + 1, a, b + 1, b);
+      }
+    }
+    geometry.addGroup(start, indices.length - start, material);
   }
-  const back = corners(rows[0]);
-  quad(back.tl, back.bl, back.br, back.tr); // tapa trasera
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return g;
+function makeSkiMaterials() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 1024;
+  const ctx = canvas.getContext('2d');
+  const rng = mulberry32(184);
+  const paint = ctx.createLinearGradient(0, 0, 256, 0);
+  paint.addColorStop(0, '#722b30');
+  paint.addColorStop(0.25, '#c44d43');
+  paint.addColorStop(0.55, '#dc6650');
+  paint.addColorStop(1, '#862f36');
+  ctx.fillStyle = paint;
+  ctx.fillRect(0, 0, 256, 1024);
+  // Vetas del laminado: textura longitudinal que se lee incluso en movimiento.
+  for (let i = 0; i < 1500; i++) {
+    ctx.strokeStyle = rng() > 0.5 ? 'rgba(255,218,175,0.10)' : 'rgba(42,16,25,0.12)';
+    ctx.lineWidth = 0.4 + rng() * 1.1;
+    const x = rng() * 256, y = rng() * 1024;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.bezierCurveTo(x + 3, y + 40, x - 2, y + 90, x + rng() * 3, y + 180);
+    ctx.stroke();
+  }
+  // Gráfica de fábrica en la pala, con bandas marfil y carbón.
+  ctx.fillStyle = '#202f38';
+  ctx.beginPath();
+  ctx.moveTo(0, 25); ctx.lineTo(256, 65);
+  ctx.lineTo(256, 100); ctx.lineTo(0, 60); ctx.fill();
+  ctx.fillStyle = '#e9d8b5';
+  ctx.beginPath();
+  ctx.moveTo(0, 70); ctx.lineTo(256, 110);
+  ctx.lineTo(256, 119); ctx.lineTo(0, 79); ctx.fill();
+  ctx.fillStyle = 'rgba(243,220,186,0.7)';
+  ctx.fillRect(24, 70, 3, 865);
+  ctx.fillRect(229, 70, 3, 865);
+  // Arañazos finos sobre la pintura, sin ruido que parpadee a distancia.
+  for (let i = 0; i < 85; i++) {
+    const x = 12 + rng() * 232, y = rng() * 1024;
+    ctx.strokeStyle = 'rgba(255,240,212,0.22)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    ctx.lineTo(x + rng() * 3, y + 8 + rng() * 65); ctx.stroke();
+  }
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return [
+    new THREE.MeshStandardMaterial({ map, roughness: 0.37, metalness: 0.12 }),
+    new THREE.MeshStandardMaterial({ color: 0x8c9ba4, roughness: 0.3, metalness: 0.75 }),
+    new THREE.MeshStandardMaterial({ color: 0x1e2630, roughness: 0.72 }),
+  ];
 }
 
 // Skis en primera persona, colgados de la cámara; se cantean al girar.
 function makeSkis() {
   const group = new THREE.Group();
-  const mat = new THREE.MeshLambertMaterial({ color: 0xd23c3c, side: THREE.DoubleSide });
+  const mat = makeSkiMaterials();
   const geo = makeSkiGeometry();
-  for (const x of [-0.16, 0.16]) {
+  for (const x of [-0.24, 0.24]) {
     const ski = new THREE.Mesh(geo, mat);
     ski.position.x = x;
+    ski.scale.setScalar(0.78); // más pequeños: ocupan menos pantalla
     group.add(ski);
   }
-  group.position.set(0, -1.05, -0.35);
+  group.position.set(0, -1.00, -0.35); // 5 cm más arriba: asoman un poco más en pantalla
+  // Cada esquí cantea sobre SU propio eje longitudinal (como un esquiador real),
+  // no el par entero alrededor de un centro común.
+  group.userData.skis = group.children;
   return group;
 }
 
+// Bloques erosionados, parcialmente enterrados, con vetas minerales y nieve
+// en las superficies altas. El tamaño conserva la zona de colisión existente.
 function makeRocks(track) {
   const group = new THREE.Group();
-  const geometry = new THREE.IcosahedronGeometry(1, 0);
-  const material = new THREE.MeshLambertMaterial({ color: 0x8a9099, flatShading: true });
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.96, metalness: 0,
+  });
   const rng = mulberry32(7);
+  const stone = new THREE.Color(0x687078);
+  const mineral = new THREE.Color(0x9b9487);
+  const snow = new THREE.Color(0xe8f1f7);
+  const color = new THREE.Color();
   for (const o of track.obstacles) {
     if (o.type !== 'rock') continue;
+    const geometry = new THREE.IcosahedronGeometry(1, LOW_END ? 1 : 2);
+    geometry.rotateY(rng() * Math.PI * 2);
+    const seed = rng() * 100;
+    const pos = geometry.getAttribute('position');
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const shape = 0.82 + valueNoise(x * 2 + seed, z * 2 + y) * 0.18;
+      pos.setXYZ(i, x * shape * 0.94, y * shape * 0.78, z * shape * 1.15);
+    }
+    geometry.computeVertexNormals();
+    const normals = geometry.getAttribute('normal');
+    const colors = [];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const grain = valueNoise(x * 17 + seed, z * 17 + y * 4);
+      const vein = valueNoise(x * 6 + y * 12 + seed, z * 3);
+      color.copy(stone).lerp(mineral, vein * 0.65).multiplyScalar(0.75 + grain * 0.4);
+      const cover = THREE.MathUtils.smoothstep(normals.getY(i), 0.35, 0.8)
+        * THREE.MathUtils.smoothstep(y + vein * 0.2, 0.02, 0.38);
+      color.lerp(snow, cover);
+      colors.push(color.r, color.g, color.b);
+    }
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     const rock = new THREE.Mesh(geometry, material);
-    const w = track.toWorld(o.s, o.lat, 0);
-    const s = 0.7 + rng() * 0.4;
-    rock.scale.set(s * 1.3, s * 0.8, s * 1.1); // achatada, medio hundida en la nieve
-    rock.position.set(w.x, w.y + s * 0.35, w.z);
-    rock.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+    rock.position.copy(track.toWorld(o.s, o.lat, snowRelief(o.s, o.lat, track.width) + 0.24));
+    rock.receiveShadow = true;
+    rock.castShadow = true;
     group.add(rock);
   }
   return group;
 }
 
-// Cuña de salto con degradé celeste (clara en la base, saturada en el labio).
+// Superficie de despegue lineal (igual a la física), con hombros de nieve
+// inclinados y un labio ligeramente azulado para distinguirlo durante la bajada.
 function makeRampGeometry(width, height, length) {
   const hw = width / 2;
-  const hl = length / 2;
-  // Sube hacia -z (sentido de bajada); cara vertical (labio) en -z.
-  const v = [
-    [-hw, 0, hl], [hw, 0, hl],      // base trasera
-    [hw, height, -hl], [-hw, height, -hl], // labio superior
-    [-hw, 0, -hl], [hw, 0, -hl],    // base delantera
-  ];
-  const baseColor = new THREE.Color(0xeaf6ff);
-  const topColor = new THREE.Color(0x5fb4ef);
-  const positions = [];
-  const colors = [];
-  const push = (...idx) => {
-    for (const i of idx) {
-      positions.push(...v[i]);
-      const c = baseColor.clone().lerp(topColor, v[i][1] / height);
-      colors.push(c.r, c.g, c.b);
-    }
+  const rows = 18;
+  const lateral = [-hw - 0.8, -hw, -hw / 2, 0, hw / 2, hw, hw + 0.8];
+  const positions = [], colors = [], uv = [], indices = [];
+  const base = new THREE.Color(0xf0f5f9);
+  const packed = new THREE.Color(0xc5dceb);
+  const lip = new THREE.Color(0x88b6d3);
+  const color = new THREE.Color();
+  const vertex = (x, y, z, t, edge) => {
+    positions.push(x, y, z);
+    uv.push(x / 4, -z / 4);
+    color.copy(base).lerp(packed, t * 0.35 + edge * 0.3)
+      .lerp(lip, THREE.MathUtils.smoothstep(t, 0.94, 1) * 0.55);
+    colors.push(color.r, color.g, color.b);
   };
-  push(0, 1, 2, 0, 2, 3); // plano inclinado
-  push(4, 5, 2, 4, 2, 3); // cara frontal (labio)
-  push(0, 3, 4);          // lateral izquierdo
-  push(1, 2, 5);          // lateral derecho
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  g.computeVertexNormals();
-  return g;
+  for (let row = 0; row <= rows; row++) {
+    const t = row / rows;
+    for (const x of lateral) {
+      const edge = Math.abs(x) > hw ? 1 : 0;
+      vertex(x, edge ? -0.08 : height * t, length / 2 - t * length, t, edge);
+    }
+  }
+  const stride = lateral.length;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < stride - 1; col++) {
+      const k = row * stride + col;
+      indices.push(k, k + 1, k + stride, k + 1, k + stride + 1, k + stride);
+    }
+  }
+  // Cierra el frente hasta el suelo; los hombros se unen con la nieve lateral.
+  const bottomStart = positions.length / 3;
+  for (const x of lateral) vertex(x, -0.08, -length / 2, 1, 1);
+  for (let col = 0; col < stride - 1; col++) {
+    const top = rows * stride + col;
+    const bottom = bottomStart + col;
+    indices.push(top, top + 1, bottom, top + 1, bottom + 1, bottom);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geometry.setIndex(indices);
+  return geometry;
 }
 
 function makeRamps(track) {
   const group = new THREE.Group();
-  // Mismas dimensiones que la física (PARAMS): el labio queda en o.s.
-  const geometry = makeRampGeometry(PARAMS.rampHalfWidth * 2, PARAMS.rampHeight, PARAMS.rampLength);
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const template = makeRampGeometry(PARAMS.rampHalfWidth * 2, PARAMS.rampHeight, PARAMS.rampLength);
+  const material = new THREE.MeshStandardMaterial({
+    ...pisteSnow, vertexColors: true, roughness: 0.94,
+    side: THREE.DoubleSide, shadowSide: THREE.FrontSide,
+  });
+  const markerGeometry = new THREE.CylinderGeometry(0.045, 0.045, 1.25, 6);
+  const markerMaterial = new THREE.MeshStandardMaterial({ color: 0xe77b32, roughness: 0.85 });
   for (const o of track.obstacles) {
     if (o.type !== 'jump') continue;
     const centerS = o.s - PARAMS.rampLength / 2;
-    const f = track.frameAt(centerS);
+    const geometry = template.clone();
+    const pos = geometry.getAttribute('position');
+    // Cada vértice sigue la curva y pendiente reales, sin una cuña rígida flotante.
+    for (let i = 0; i < pos.count; i++) {
+      const w = track.toWorld(centerS - pos.getZ(i), o.lat + pos.getX(i), pos.getY(i));
+      pos.setXYZ(i, w.x, w.y, w.z);
+    }
+    geometry.computeVertexNormals();
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(track.toWorld(centerS, o.lat, 0.05));
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), f.tan);
+    mesh.receiveShadow = true;
     group.add(mesh);
+    for (const side of [-1, 1]) {
+      const lat = o.lat + side * (PARAMS.rampHalfWidth + 0.95);
+      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      marker.position.copy(track.toWorld(o.s, lat, snowRelief(o.s, lat, track.width) + 0.625));
+      group.add(marker);
+    }
   }
+  template.dispose();
   return group;
 }
 
-// Público junto a la meta: figuras low-poly que saltan y agitan los brazos.
+// Público con proporciones humanas y ropa de invierno. Cada cuerpo y brazo
+// se agrupa en una sola malla para mantener bajo el número de draw calls.
 function makeCrowd(track, finishS) {
   crowd = [];
   const group = new THREE.Group();
   const rng = mulberry32(77);
-  const jackets = [0xe04848, 0x2f80d0, 0xf2b134, 0x7a4fd0, 0x2fae62, 0xe07a2f];
-  const bodyGeo = new THREE.CapsuleGeometry(0.28, 0.7, 4, 8);
-  const headGeo = new THREE.SphereGeometry(0.16, 8, 6);
-  const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.55, 6);
-  const skin = new THREE.MeshLambertMaterial({ color: 0xd9a06a });
+  const jackets = [0xb9473d, 0x3279a0, 0xd8a548, 0x67547f, 0x50806d, 0xc56e40];
+  const skins = [0xe4b598, 0xc38e6c, 0x95674f, 0x674638];
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
+  const sphere = new THREE.SphereGeometry(1, LOW_END ? 10 : 16, LOW_END ? 8 : 12);
+  const capsule = new THREE.CapsuleGeometry(1, 1, 4, LOW_END ? 8 : 12);
+  const up = new THREE.Vector3(0, 1, 0);
+  // Todas las piezas usan color de vértice; el sombreado sigue siendo suave.
+  const builder = () => {
+    const positions = [], normals = [], colors = [];
+    const add = (source, position, scale, color, rotation = new THREE.Quaternion()) => {
+      const geo = source.clone();
+      geo.applyMatrix4(new THREE.Matrix4().compose(
+        new THREE.Vector3(...position), rotation, new THREE.Vector3(...scale),
+      ));
+      const flat = geo.toNonIndexed();
+      const pos = flat.getAttribute('position'), normal = flat.getAttribute('normal');
+      const tint = new THREE.Color(color);
+      for (let i = 0; i < pos.count; i++) {
+        positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
+        normals.push(normal.getX(i), normal.getY(i), normal.getZ(i));
+        colors.push(tint.r, tint.g, tint.b);
+      }
+      geo.dispose(); flat.dispose();
+    };
+    const segment = (a, b, radius, color) => {
+      const from = new THREE.Vector3(...a), to = new THREE.Vector3(...b);
+      const delta = to.clone().sub(from);
+      add(capsule, from.add(to).multiplyScalar(0.5).toArray(),
+        [radius, (delta.length() + radius) / 3, radius], color,
+        new THREE.Quaternion().setFromUnitVectors(up, delta.normalize()));
+    };
+    const finish = () => {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.castShadow = mesh.receiveShadow = true;
+      return mesh;
+    };
+    return { add, segment, finish };
+  };
   for (let i = 0; i < 12; i++) {
-    // Apiñados justo después de la meta, pegados al borde de la pista.
     const side = i % 2 === 0 ? 1 : -1;
-    const s = finishS + 3 + rng() * 11;
-    const lat = side * (track.width / 2 + 0.6 + rng() * 1.2);
-    const jacket = new THREE.MeshLambertMaterial({ color: jackets[i % jackets.length] });
+    // Filas espaciadas: las siluetas no se atraviesan al saludar.
+    const s = finishS + 2 + Math.floor(i / 2) * 1.9 + rng() * 0.3;
+    const lat = side * (track.width / 2 + 1.0 + rng() * 0.6);
+    const jacket = jackets[i % jackets.length];
+    const trim = new THREE.Color(jacket).multiplyScalar(0.58);
+    const skin = skins[i % skins.length];
+    const pants = i % 3 === 0 ? 0x414b58 : 0x27333c;
+    const hat = i % 2 === 0 ? 0xe5dbc5 : trim;
     const fig = new THREE.Group();
-    const body = new THREE.Mesh(bodyGeo, jacket);
-    body.position.y = 0.75;
-    const head = new THREE.Mesh(headGeo, skin);
-    head.position.y = 1.45;
-    fig.add(body, head);
+    const body = builder();
+    // Dos piernas articuladas, separadas, con rodillas y botas apoyadas.
+    for (const leg of [-1, 1]) {
+      const x = leg * 0.135;
+      body.segment([x, 0.88, 0], [x * 1.12, 0.49, 0.025], 0.105, pants);
+      body.segment([x * 1.12, 0.49, 0.025], [x * 1.22, 0.16, 0], 0.085, pants);
+      body.add(sphere, [x * 1.22, 0.105, 0.045], [0.105, 0.105, 0.19], 0x252b30);
+      body.add(sphere, [x * 1.22, 0.035, 0.06], [0.11, 0.033, 0.195], 0x121a21);
+    }
+    body.add(capsule, [0, 1.12, 0], [0.245, 0.20, 0.155], jacket);
+    body.add(sphere, [0, 0.87, 0], [0.24, 0.075, 0.154], trim);
+    // Costuras acolchadas y cremallera sobre el delantero de la chaqueta.
+    for (const y of [1.00, 1.13, 1.26]) {
+      body.segment([-0.19, y, 0.14], [0.19, y, 0.14], 0.008, trim);
+    }
+    body.segment([0, 0.89, 0.159], [0, 1.39, 0.159], 0.009, 0xd2d6d4);
+    body.add(sphere, [0, 1.42, 0], [0.115, 0.07, 0.115], trim);
+    body.add(sphere, [-0.095, 1.30, 0.148], [0.044, 0.12, 0.025], hat);
+    body.add(sphere, [0, 1.60, 0.01], [0.13, 0.174, 0.125], skin);
+    for (const x of [-0.13, 0.13]) body.add(sphere, [x, 1.59, 0.015], [0.028, 0.046, 0.03], skin);
+    body.add(sphere, [0, 1.585, 0.132], [0.029, 0.039, 0.039], skin);
+    for (const x of [-0.047, 0.047]) {
+      body.add(sphere, [x, 1.635, 0.121], [0.013, 0.009, 0.007], 0x302c2a);
+      body.segment([x - 0.018, 1.66, 0.115], [x + 0.017, 1.662, 0.115], 0.007, 0x514039);
+    }
+    body.segment([-0.031, 1.535, 0.114], [0, 1.528, 0.122], 0.006, 0x83554c);
+    body.segment([0, 1.528, 0.122], [0.031, 1.535, 0.114], 0.006, 0x83554c);
+    // Gorro tejido con vuelta y pompón, a distintas alturas y colores.
+    body.add(sphere, [0, 1.735, 0], [0.14, 0.095, 0.136], hat);
+    body.add(sphere, [0, 1.696, 0], [0.145, 0.036, 0.14], trim);
+    if (i % 3 !== 0) body.add(sphere, [0.015, 1.825, 0], [0.046, 0.045, 0.046], hat);
+    fig.add(body.finish());
     const arms = [];
     for (const armSide of [-1, 1]) {
       const shoulder = new THREE.Group();
-      shoulder.position.set(armSide * 0.33, 1.15, 0);
-      const arm = new THREE.Mesh(armGeo, jacket);
-      arm.position.y = 0.24; // pivota desde el hombro
-      shoulder.add(arm);
-      shoulder.rotation.z = armSide * 2.4; // brazos en alto
+      shoulder.position.set(armSide * 0.23, 1.34, 0);
+      const arm = builder();
+      arm.segment([0, 0, 0], [armSide * 0.035, -0.27, 0], 0.09, jacket);
+      arm.add(sphere, [armSide * 0.035, -0.26, 0], [0.086, 0.09, 0.085], jacket);
+      arm.segment([armSide * 0.035, -0.26, 0], [armSide * 0.02, -0.48, 0.13], 0.075, jacket);
+      arm.add(sphere, [armSide * 0.02, -0.48, 0.13], [0.075, 0.045, 0.075], trim);
+      arm.add(sphere, [armSide * 0.02, -0.545, 0.15], [0.065, 0.083, 0.055], 0x29323b);
+      arm.add(sphere, [-armSide * 0.033, -0.53, 0.17], [0.03, 0.047, 0.032], 0x29323b);
+      shoulder.add(arm.finish());
+      shoulder.userData.restAngle = armSide * (i % 3 === 0 || armSide === side ? 2.45 : 0.35);
+      shoulder.rotation.z = shoulder.userData.restAngle;
       fig.add(shoulder);
       arms.push(shoulder);
     }
-    const w = track.toWorld(s, lat, 0);
+    const heightScale = 0.91 + rng() * 0.15;
+    fig.scale.set(heightScale * (0.94 + rng() * 0.12), heightScale, heightScale);
+    const w = track.toWorld(s, lat, snowRelief(s, lat, track.width));
     fig.position.copy(w);
-    const facing = track.toWorld(s, 0, 0);
-    fig.lookAt(facing.x, w.y, facing.z); // mirando a la pista
+    const facing = track.toWorld(finishS - 5, 0, 0);
+    fig.lookAt(facing.x, w.y, facing.z);
     group.add(fig);
-    crowd.push({ fig, arms, baseY: w.y, phase: rng() * Math.PI * 2 });
+    crowd.push({ fig, arms, baseY: w.y, phase: rng() * Math.PI * 2, energy: 0.7 + rng() * 0.6 });
   }
+  sphere.dispose(); capsule.dispose();
   return group;
 }
 
@@ -1041,6 +1684,7 @@ function makeGate(track, s, accentColor) {
   }
 
   // Orienta el arco local (x = ancho de pista) y lo planta en el terreno.
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   g.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), track.frameAt(s).side);
   g.position.copy(track.toWorld(s, 0, 0));
   return g;

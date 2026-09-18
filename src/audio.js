@@ -5,7 +5,7 @@ export function createSnowSound() {
   let ctx = null;
   let master = null; // volumen maestro: todo el audio pasa por aquí (mute global)
   let muted = false;
-  let bgHidden = false; // silencio mientras la app está en segundo plano
+  let bgHidden = document.hidden; // tras salir, esperar un gesto para reactivar
 
   function applyMasterGain() {
     if (master) master.gain.value = (muted || bgHidden) ? 0 : 1;
@@ -117,9 +117,9 @@ export function createSnowSound() {
   }
 
   function resume() {
-    if (!ctx || ctx.state === 'running') return;
+    if (!ctx || muted || bgHidden || document.hidden || ctx.state === 'running') return;
     try {
-      if (navigator.audioSession) navigator.audioSession.type = 'playback';
+      if (navigator.audioSession) navigator.audioSession.type = 'ambient';
     } catch { /* API no disponible */ }
     ctx.resume().catch(() => { /* fuera de gesto: se reintentará */ });
   }
@@ -134,37 +134,53 @@ export function createSnowSound() {
     resume();
   }
 
+  function suspend() {
+    clearTimeout(aliveTimer);
+    applyMasterGain();
+    if (ctx && ctx.state !== 'closed') {
+      ctx.suspend().catch(() => { /* contexto interrumpido por el sistema */ });
+    }
+  }
+
   return {
     // Llamar dentro de un gesto del usuario (click/touch) para poder sonar en iOS.
     start() {
-      // En iOS, que el audio suene aunque el interruptor de silencio esté activado.
+      if (document.hidden) return;
+      bgHidden = false;
+      // Audio ambiental del juego: no reclamar una sesión multimedia exclusiva.
       try {
-        if (navigator.audioSession) navigator.audioSession.type = 'playback';
+        if (navigator.audioSession) navigator.audioSession.type = 'ambient';
       } catch { /* API no disponible: seguimos igual */ }
       ensure();
-      resume();
+      applyMasterGain();
+      if (muted) suspend();
+      else resume();
       if (ctx && !ouchBuffers.length) loadAssets();
       if (!lifecycleHooked) {
         lifecycleHooked = true;
-        // Al cambiar de app se silencia TODO (la sesión 'playback' seguiría
-        // sonando en segundo plano si no); al volver, se reanuda.
+        // Silenciar no libera el dispositivo: suspender también el contexto.
+        // Mantenerlo suspendido al volver hasta el siguiente gesto del usuario.
+        const onBackground = () => {
+          bgHidden = true;
+          suspend();
+        };
         document.addEventListener('visibilitychange', () => {
-          bgHidden = document.hidden;
-          applyMasterGain();
-          if (!document.hidden) {
-            resume();
-            checkAlive();
-          }
+          if (document.hidden) onBackground();
         });
+        window.addEventListener('pagehide', onBackground);
         // Cualquier gesto reactiva el audio (iOS exige gesto para resume());
         // si el vigilante marcó el contexto como muerto, se reconstruye aquí,
         // dentro del gesto, que es donde iOS permite crear audio que suene.
         const onGesture = () => {
+          if (document.hidden || muted) return;
+          bgHidden = false;
+          applyMasterGain();
           if (suspectedDead) {
             suspectedDead = false;
             rebuild();
           } else {
             resume();
+            checkAlive();
           }
         };
         for (const ev of ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown']) {
@@ -176,6 +192,8 @@ export function createSnowSound() {
     setMuted(m) {
       muted = m;
       applyMasterGain();
+      if (muted) suspend();
+      else resume();
     },
     // Música de menú en bucle (con fundido de entrada). Llamar tras un gesto.
     playMenu() {

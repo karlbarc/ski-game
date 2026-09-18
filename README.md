@@ -3,10 +3,11 @@
 Juego de ski en primera persona para navegador (móvil y escritorio).
 Baja la pista en el menor tiempo posible sin caerte.
 
-Tres pistas, seleccionables en el menú de inicio:
+Cuatro pistas, seleccionables en el menú de inicio:
 - **Verde** (fácil)
 - **Azul** (media: más angosta, curvas cerradas y más obstáculos)
 - **Negra** (difícil: 9 m de ancho, más empinada, obstáculos en el centro y 4 saltos)
+- **Alpina** (media: descenso largo de pendiente variable, palas, travesía y eses amplias; 18 m de ancho, rocas y 3 saltos opcionales)
 
 ## Jugar
 
