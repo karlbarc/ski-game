@@ -7,6 +7,12 @@ export function createSnowSound() {
   let muted = false;
   let bgHidden = document.hidden; // tras salir, esperar un gesto para reactivar
 
+  function setSessionType(type) {
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = type;
+    } catch { /* Safari antiguo: la API puede no estar disponible. */ }
+  }
+
   function applyMasterGain() {
     if (master) master.gain.value = (muted || bgHidden) ? 0 : 1;
   }
@@ -61,7 +67,7 @@ export function createSnowSound() {
   }
 
   function ensure() {
-    if (ctx) return;
+    if (ctx && ctx.state !== 'closed') return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ctx = new AC();
@@ -95,16 +101,17 @@ export function createSnowSound() {
   // Si está congelado, el contexto murió: se reconstruirá en el próximo gesto.
   function checkAlive() {
     if (!ctx || document.hidden) return;
-    const t0 = ctx.currentTime;
+    const observed = ctx;
+    const t0 = observed.currentTime;
     clearTimeout(aliveTimer);
     aliveTimer = setTimeout(() => {
-      if (!ctx || document.hidden) return;
-      if (ctx.state === 'running' && ctx.currentTime === t0) suspectedDead = true;
-    }, 400);
+      if (ctx !== observed || document.hidden || muted || bgHidden) return;
+      if (ctx.state !== 'running' || ctx.currentTime === t0) suspectedDead = true;
+    }, 500);
   }
 
   function rebuild() {
-    try { if (ctx) ctx.close(); } catch { /* ya cerrado */ }
+    try { if (ctx && ctx.state !== 'closed') ctx.close().catch(() => {}); } catch { /* ya cerrado */ }
     ctx = null;
     master = null;
     gain = null;
@@ -117,10 +124,9 @@ export function createSnowSound() {
   }
 
   function resume() {
-    if (!ctx || muted || bgHidden || document.hidden || ctx.state === 'running') return;
-    try {
-      if (navigator.audioSession) navigator.audioSession.type = 'ambient';
-    } catch { /* API no disponible */ }
+    if (!ctx || muted || bgHidden || document.hidden || ctx.state === 'closed') return;
+    setSessionType('playback');
+    if (ctx.state === 'running') return;
     ctx.resume().catch(() => { /* fuera de gesto: se reintentará */ });
   }
 
@@ -137,9 +143,33 @@ export function createSnowSound() {
   function suspend() {
     clearTimeout(aliveTimer);
     applyMasterGain();
+    setSessionType('auto'); // liberar el audio al silenciar o cambiar de aplicación
     if (ctx && ctx.state !== 'closed') {
       ctx.suspend().catch(() => { /* contexto interrumpido por el sistema */ });
     }
+  }
+
+  function activate() {
+    if (document.hidden) return;
+    if (!muted) setSessionType('playback');
+    if (suspectedDead || ctx?.state === 'closed') {
+      suspectedDead = false;
+      rebuild();
+    } else {
+      ensure();
+    }
+    applyMasterGain();
+    if (muted) { suspend(); return; }
+    if (!ctx) return;
+    // Iniciar una fuente dentro del toque desbloquea el motor de Safari,
+    // aunque la música aún se esté descargando y el esquiador esté detenido.
+    const unlock = ctx.createBufferSource();
+    unlock.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    unlock.connect(master);
+    unlock.onended = () => unlock.disconnect();
+    unlock.start();
+    resume(); // también después de reconstruir un contexto interrumpido
+    checkAlive();
   }
 
   return {
@@ -147,14 +177,7 @@ export function createSnowSound() {
     start() {
       if (document.hidden) return;
       bgHidden = false;
-      // Audio ambiental del juego: no reclamar una sesión multimedia exclusiva.
-      try {
-        if (navigator.audioSession) navigator.audioSession.type = 'ambient';
-      } catch { /* API no disponible: seguimos igual */ }
-      ensure();
-      applyMasterGain();
-      if (muted) suspend();
-      else resume();
+      activate();
       if (ctx && !ouchBuffers.length) loadAssets();
       if (!lifecycleHooked) {
         lifecycleHooked = true;
@@ -174,14 +197,7 @@ export function createSnowSound() {
         const onGesture = () => {
           if (document.hidden || muted) return;
           bgHidden = false;
-          applyMasterGain();
-          if (suspectedDead) {
-            suspectedDead = false;
-            rebuild();
-          } else {
-            resume();
-            checkAlive();
-          }
+          activate();
         };
         for (const ev of ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown']) {
           window.addEventListener(ev, onGesture, { passive: true });

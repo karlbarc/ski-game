@@ -15,7 +15,7 @@ import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRan
 import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
 import { landingStrength, landingMotion } from './landing.js';
-import { createSnowSound } from './audio.js?v=1789739534';
+import { createSnowSound } from './audio.js?v=1789743651';
 
 const GAME_VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const query = new URLSearchParams(location.search);
@@ -241,6 +241,7 @@ function toggleMute() {
   soundMuted = !soundMuted;
   localStorage.setItem('ski-muted', soundMuted ? '1' : '0');
   snow.setMuted(soundMuted);
+  if (!soundMuted) snow.start(); // desbloqueo explícito dentro del toque
   updateMuteIcons();
 }
 document.getElementById('btn-mute').addEventListener('click', toggleMute);
@@ -445,6 +446,7 @@ function pauseGame() {
 
 function resumeGame() {
   if (!paused) return;
+  snow.start();
   last = performance.now(); // no consumir en la salida el tiempo en segundo plano
   if (startSequence.clockMs != null) startSequence = { ...startSequence, clockMs: last };
   paused = false;

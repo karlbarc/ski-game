@@ -51,10 +51,11 @@ for (const hasAudioSession of [true, false]) {
     sound.land(0.8);
     assert.equal(ctx.signals.length, 3, 'landing adds a short bass impact');
     assert.ok(ctx.signals[2].stopTime <= 0.24);
-    if (hasAudioSession) assert.equal(navigator.audioSession.type, 'ambient');
+    if (hasAudioSession) assert.equal(navigator.audioSession.type, 'playback');
     document.hidden = true;
     document.dispatchEvent(new Event('visibilitychange'));
     assert.equal(ctx.state, 'suspended');
+    if (hasAudioSession) assert.equal(navigator.audioSession.type, 'auto');
     sound.startSignal();
     sound.land(1);
     assert.equal(ctx.signals.length, 3, 'background countdown and landing must stay silent');
@@ -88,3 +89,70 @@ for (const hasAudioSession of [true, false]) {
     sound.setMuted(true); // cancel the liveness timer
   });
 }
+
+test('iPhone unlocks suspended audio and rebuilds an interrupted or closed context from a touch', (t) => {
+  const document = new EventTarget();
+  document.hidden = false;
+  const window = new EventTarget();
+  const contexts = [];
+  const timers = new Map();
+  let timerId = 0;
+  const param = () => ({ value: 0, setTargetAtTime() {} });
+  window.AudioContext = class {
+    state = 'suspended';
+    sampleRate = 100;
+    currentTime = 0;
+    resumes = 0;
+    blocked = false;
+    sources = [];
+    constructor() { contexts.push(this); }
+    createGain() { return { gain: param(), connect() {} }; }
+    createBuffer(channels, length) { return { getChannelData: () => new Float32Array(length) }; }
+    createBiquadFilter() { return { frequency: param(), Q: param(), connect() {} }; }
+    createBufferSource() {
+      const source = { connect() {}, disconnect() {}, start() { this.started = true; } };
+      this.sources.push(source);
+      return source;
+    }
+    resume() {
+      this.resumes++;
+      if (!this.blocked) { this.state = 'running'; this.currentTime += 0.01; }
+      return Promise.resolve();
+    }
+    suspend() { this.state = 'suspended'; return Promise.resolve(); }
+    close() { this.state = 'closed'; return Promise.resolve(); }
+  };
+  const navigator = { audioSession: { type: 'auto' } };
+  const globals = { window, document, navigator,
+    fetch: async () => { throw new Error('offline'); },
+    setTimeout: fn => { timers.set(++timerId, fn); return timerId; },
+    clearTimeout: id => timers.delete(id),
+  };
+  for (const [key, value] of Object.entries(globals)) {
+    const original = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+    t.after(() => original ? Object.defineProperty(globalThis, key, original) : delete globalThis[key]);
+  }
+  const sound = createSnowSound();
+  sound.start();
+  const original = contexts[0];
+  assert.equal(original.state, 'running');
+  assert.equal(navigator.audioSession.type, 'playback');
+  assert.ok(original.sources.some(source => source.started && !source.loop), 'a source is started during the gesture');
+  original.state = 'interrupted';
+  original.blocked = true;
+  window.dispatchEvent(new Event('touchend'));
+  for (const fn of [...timers.values()]) fn();
+  window.dispatchEvent(new Event('click'));
+  assert.equal(contexts.length, 2);
+  assert.equal(original.state, 'closed');
+  assert.equal(contexts[1].state, 'running', 'replacement context must also be resumed');
+  assert.ok(contexts[1].resumes > 0);
+  contexts[1].state = 'closed';
+  sound.start();
+  assert.equal(contexts.length, 3);
+  assert.equal(contexts[2].state, 'running');
+  sound.setMuted(true);
+  assert.equal(navigator.audioSession.type, 'auto');
+  assert.equal(contexts[2].state, 'suspended');
+});
