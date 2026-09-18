@@ -8,18 +8,26 @@ for (const hasAudioSession of [true, false]) {
     document.hidden = false;
     const window = new EventTarget();
     const contexts = [];
-    const param = () => ({ value: 0, setTargetAtTime() {} });
+    const param = () => ({ value: 0, setTargetAtTime() {},
+      setValueAtTime(value) { this.value = value; }, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} });
     window.AudioContext = class {
       state = 'running';
       sampleRate = 10;
       currentTime = 0;
+      signals = [];
       resumes = 0;
       suspends = 0;
       constructor() { contexts.push(this); }
-      createGain() { return { gain: param(), connect() {} }; }
+      createGain() { return { gain: param(), connect() {}, disconnect() {} }; }
+      createOscillator() {
+        const signal = { frequency: param(), connect() {}, disconnect() {}, start() {},
+          stop(time) { this.stopTime = time; } };
+        this.signals.push(signal);
+        return signal;
+      }
       createBuffer() { return { getChannelData: () => new Float32Array(20) }; }
-      createBufferSource() { return { connect() {}, start() {} }; }
-      createBiquadFilter() { return { frequency: param(), Q: param(), connect() {} }; }
+      createBufferSource() { return { connect() {}, start() {}, stop() {}, disconnect() {} }; }
+      createBiquadFilter() { return { frequency: param(), Q: param(), connect() {}, disconnect() {} }; }
       suspend() { this.suspends++; this.state = 'suspended'; return Promise.resolve(); }
       resume() { this.resumes++; this.state = 'running'; return Promise.resolve(); }
     };
@@ -35,10 +43,21 @@ for (const hasAudioSession of [true, false]) {
     const sound = createSnowSound();
     sound.start();
     const ctx = contexts[0];
+    sound.startSignal();
+    sound.startSignal(true);
+    assert.equal(ctx.signals.length, 2);
+    assert.ok(ctx.signals[1].frequency.value > ctx.signals[0].frequency.value);
+    assert.ok(ctx.signals[1].stopTime > ctx.signals[0].stopTime);
+    sound.land(0.8);
+    assert.equal(ctx.signals.length, 3, 'landing adds a short bass impact');
+    assert.ok(ctx.signals[2].stopTime <= 0.24);
     if (hasAudioSession) assert.equal(navigator.audioSession.type, 'ambient');
     document.hidden = true;
     document.dispatchEvent(new Event('visibilitychange'));
     assert.equal(ctx.state, 'suspended');
+    sound.startSignal();
+    sound.land(1);
+    assert.equal(ctx.signals.length, 3, 'background countdown and landing must stay silent');
     sound.update(20, 1, true);
     window.dispatchEvent(new Event('pointerdown'));
     assert.equal(ctx.resumes, 0);
@@ -49,6 +68,9 @@ for (const hasAudioSession of [true, false]) {
     window.dispatchEvent(new Event('pointerdown'));
     assert.equal(ctx.state, 'running');
     sound.setMuted(true);
+    sound.startSignal(true);
+    sound.land(1);
+    assert.equal(ctx.signals.length, 3, 'muted countdown and landing must stay silent');
     const resumes = ctx.resumes;
     sound.update(20, 1, true);
     window.dispatchEvent(new Event('pointerdown'));

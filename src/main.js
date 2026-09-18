@@ -12,6 +12,9 @@ import {
 import { createControls } from './controls.js?v=1784480748';
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784480748';
+import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose } from './ski-surface.js';
+import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
+import { landingStrength, landingMotion } from './landing.js';
 import { createSnowSound } from './audio.js?v=1789739534';
 
 const GAME_VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
@@ -76,8 +79,13 @@ scene.add(sun.target);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 3000);
 const skis = makeSkis();
-camera.add(skis);
-scene.add(camera); // necesario para que se rendericen los hijos de la cámara
+let skiVisualPose = null;
+let landingAge = 1;
+let landingImpact = 0;
+scene.add(skis);
+const skiContactShadows = makeSkiContactShadows();
+scene.add(skiContactShadows);
+scene.add(camera);
 
 const TRACKS = { verde, azul, negra, alpina };
 const pisteSnow = makeSnowSurface(true);
@@ -87,6 +95,9 @@ let track = null;
 let START_S = 15;
 let FINISH_S = 0;
 let worldGroup = null;
+let startGate = null;
+let startSequence = createStartSequence();
+let lastStartCue = null;
 
 // Construye (o reemplaza) el mundo 3D de la pista seleccionada.
 function loadTrack(data) {
@@ -102,7 +113,8 @@ function loadTrack(data) {
   worldGroup.add(makeTrees(track));
   worldGroup.add(makeRocks(track));
   worldGroup.add(makeRamps(track));
-  worldGroup.add(makeGate(track, START_S, 0xd04040));
+  startGate = makeStartGate(track, START_S);
+  worldGroup.add(startGate);
   worldGroup.add(makeGate(track, FINISH_S, 0x3050c0));
   worldGroup.add(makeCrowd(track, FINISH_S));
   const center = track.toWorld(track.length / 2, 0, 0);
@@ -207,6 +219,7 @@ document.getElementById('btn-resume').addEventListener('click', resumeGame);
 document.getElementById('btn-restart-pause').addEventListener('click', restart);
 document.getElementById('btn-restart-fall').addEventListener('click', restart);
 function goToMenu() {
+  started = false;
   restart(); // resetea carrera y oculta overlays de meta/caída/pausa
   started = false;
   buildTrackMenu(); // refresca los mejores tiempos en las tarjetas
@@ -380,6 +393,7 @@ function startRun(key) {
   selectedTrack = key;
   document.getElementById('track-screen').classList.remove('visible');
   document.getElementById('hud').classList.remove('hidden');
+  snow.start();
   snow.stopMenu();
   loadTrack(TRACKS[key]);
   started = true;
@@ -399,7 +413,16 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function restart() {
+  landingAge = 1;
+  landingImpact = 0;
+  skiVisualPose = null;
   player = createPlayerState();
+  player.s = START_S - 2.8;
+  startSequence = createStartSequence();
+  lastStartCue = null;
+  hud.setCountdown(null);
+  if (started) snow.start();
+  if (startGate) startGate.userData.arm.rotation.y = 0;
   race = createRace(START_S, FINISH_S);
   finishShown = false;
   paused = false;
@@ -422,6 +445,8 @@ function pauseGame() {
 
 function resumeGame() {
   if (!paused) return;
+  last = performance.now(); // no consumir en la salida el tiempo en segundo plano
+  if (startSequence.clockMs != null) startSequence = { ...startSequence, clockMs: last };
   paused = false;
   race = resumeRace(race, performance.now());
   // Si se pausó estando caído, el crono debe seguir detenido hasta Continuar.
@@ -483,14 +508,18 @@ function finish() {
   );
 }
 
-function updateCamera() {
+function updateCamera(visualDt) {
+  landingAge += visualDt;
+  const landing = landingMotion(landingAge, player.fallen || player.airborne ? 0 : landingImpact);
   const f = track.frameAt(player.s);
   const eye = player.fallen ? 0.6 : 1.7;
-  const pos = track.toWorld(player.s, player.lat, player.height + eye);
+  const surfaceHeight = snowRelief(player.s, player.lat, track.width);
+  const pos = track.toWorld(player.s, player.lat, surfaceHeight + player.height + eye - landing.dip);
   camera.position.copy(pos);
   const dir = f.tan.clone().multiplyScalar(Math.cos(player.heading))
     .addScaledVector(f.side, Math.sin(player.heading));
   camera.lookAt(pos.clone().add(dir));
+  if (!player.fallen) camera.rotateX(-0.12 - landing.pitch); // la mirada incluye la nieve y las palas
   camera.rotateZ(player.fallen ? 0.5 : steerSmooth * 0.16);
   const fov = Math.min(95, 70 + player.speed * 0.9);
   if (Math.abs(fov - camera.fov) > 0.1) {
@@ -505,24 +534,117 @@ function updateCamera() {
   sun.position.set(focus.x + 100, focus.y + 54, focus.z - 30);
 
   skis.visible = !player.fallen;
-  // Canteo individual: cada esquí rota sobre su propio eje longitudinal, los dos
-  // hacia el mismo lado. El grupo no rota, así no se balancean como una tabla.
-  skis.rotation.z = 0;
-  skis.rotation.y = 0;                    // sin guiñada: apuntan siempre al frente
-  for (const ski of skis.userData.skis) ski.rotation.z = steerSmooth * 0.6;
-  skis.rotation.x = player.airborne ? 0.15 : 0;
-  // El FOV se abre con la velocidad y estira la perspectiva de lo cercano:
-  // compensamos la profundidad de los skis para que no parezcan alargarse.
-  skis.scale.z = Math.tan(THREE.MathUtils.degToRad(35)) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const lengthScale = skiLengthScale(camera.fov);
+  skis.scale.z = lengthScale;
+  const supportRamp = findSkiSupportRamp(track, player);
+  const cos = Math.cos(player.heading), sin = Math.sin(player.heading);
+  const surfacePoint = (distance, lateral = 0, extendRamp = true) => {
+    const s = player.s + distance * cos + lateral * sin;
+    const lat = player.lat + distance * sin - lateral * cos;
+    return track.toWorld(s, lat,
+      skiSurfaceHeight(track, s, lat, snowRelief, extendRamp ? supportRamp : null));
+  };
+  // Ajustar el plano desde la cola hasta la punta permite subir a una rampa
+  // antes de que los pies lleguen a ella. En el labio conserva su inclinación.
+  const rearDistance = 0.5 - 0.45 * lengthScale;
+  const frontDistance = 0.5 + 1.60 * lengthScale;
+  const rear = surfacePoint(rearDistance);
+  const front = surfacePoint(frontDistance);
+  const forward = front.clone().sub(rear).normalize();
+  const edgeAngle = steerSmooth * (0.6 + 0.16);
+  const contactHeight = 0.022 + Math.abs(Math.sin(edgeAngle)) * 0.103;
+  const origin = rear.clone().lerp(front, (0.5 - rearDistance) / (frontDistance - rearDistance));
+  // Mantiene toda la base por encima de las pequeñas irregularidades de nieve.
+  let clearance = 0;
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4;
+    const ground = surfacePoint(THREE.MathUtils.lerp(rearDistance, frontDistance, t));
+    clearance = Math.max(clearance, ground.y - THREE.MathUtils.lerp(rear.y, front.y, t));
+  }
+  origin.y += contactHeight + clearance;
+  if (player.airborne) {
+    origin.copy(track.toWorld(player.s + 0.5 * cos, player.lat + 0.5 * sin,
+      player.height + snowRelief(player.s, player.lat, track.width) + contactHeight));
+    forward.copy(f.tan).multiplyScalar(cos).addScaledVector(f.side, sin).normalize();
+  }
+  const baseForward = f.tan.clone().multiplyScalar(cos).addScaledVector(f.side, sin).normalize();
+  const baseRight = new THREE.Vector3().crossVectors(baseForward, new THREE.Vector3(0, 1, 0)).normalize();
+  const baseNormal = new THREE.Vector3().crossVectors(baseRight, baseForward).normalize();
+  const anchor = track.toWorld(player.s + 0.5 * cos, player.lat + 0.5 * sin,
+    player.height + snowRelief(player.s, player.lat, track.width) + contactHeight);
+  const targetPose = {
+    pitch: player.airborne ? 0.12 : Math.atan2(forward.dot(baseNormal), forward.dot(baseForward)),
+    lift: origin.y - anchor.y,
+  };
+  skiVisualPose = smoothSkiPose(skiVisualPose, targetPose, visualDt);
+  skis.position.copy(anchor);
+  skis.position.y += skiVisualPose.lift;
+  skis.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+    baseRight, baseNormal, baseForward.clone().negate(),
+  ));
+  skis.rotateX(skiVisualPose.pitch);
+  if (!player.airborne) {
+    // El suavizado nunca mete la base en la rampa. Solo corregimos el contacto;
+    // esa pequeña elevación también se conserva y se disipa al despegar.
+    let contactLift = 0;
+    for (let i = 0; i <= 4; i++) {
+      const t = i / 4;
+      const localZ = (0.45 - t * 2.05) * lengthScale;
+      const base = new THREE.Vector3(0, 0, localZ).applyQuaternion(skis.quaternion).add(skis.position);
+      const ground = surfacePoint(THREE.MathUtils.lerp(rearDistance, frontDistance, t));
+      contactLift = Math.max(contactLift, ground.y + contactHeight - base.y);
+    }
+    skis.position.y += contactLift;
+    skiVisualPose.lift += contactLift;
+  }
+  for (const ski of skis.userData.skis) {
+    ski.rotation.z = edgeAngle;
+    ski.scale.y = 1 - landing.flex; // compresión breve del rocker al tocar nieve
+  }
+
+  // Sombra de contacto ceñida a cada base, proyectada sobre la superficie real.
+  // No utiliza el normalBias de los árboles, que desplazaba la sombra del esquí.
+  skiContactShadows.visible = !player.fallen && !player.airborne;
+  if (skiContactShadows.visible) {
+    for (let k = 0; k < skiContactShadows.children.length; k++) {
+      const shadow = skiContactShadows.children[k];
+      const vertices = shadow.geometry.getAttribute('position');
+      const centerX = skis.userData.skis[k].position.x;
+      for (let row = 0; row <= 16; row++) {
+        const t = row / 16;
+        const distance = 0.5 + (-0.45 + t * 2.05) * lengthScale;
+        for (let side = 0; side < 2; side++) {
+          const point = surfacePoint(distance, centerX + (side ? 0.12 : -0.12), false);
+          vertices.setXYZ(row * 2 + side, point.x, point.y + 0.012, point.z);
+        }
+      }
+      vertices.needsUpdate = true;
+    }
+  }
 }
 
 let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
-  const dt = Math.min((now - last) / 1000, 0.05) * TIMESCALE;
+  const realDt = Math.max(0, (now - last) / 1000);
+  const dt = Math.min(realDt, 0.05) * TIMESCALE;
   last = now;
 
-  if (started && !paused && race.status !== 'finished') {
+  if (started && !paused) {
+    startSequence = stepPresentedStartSequence(startSequence, now);
+    if (startSequence.clockMs != null && lastStartCue !== startSequence.cue) {
+      snow.startSignal(startSequence.cue === 0);
+      lastStartCue = startSequence.cue;
+    }
+    hud.setCountdown(startSequence.visible ? startSequence.cue : null);
+    const target = startSequence.released ? -Math.PI / 2 : 0;
+    startGate.userData.arm.rotation.y += (target - startGate.userData.arm.rotation.y) * Math.min(1, realDt * 12);
+    startGate.userData.light.material.color.set(startSequence.released ? 0x64e8b3 : 0xff674f);
+  } else {
+    hud.setCountdown(null);
+  }
+
+  if (started && !paused && startSequence.released && race.status !== 'finished') {
     const rawSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
     steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * 3);
     const prev = player;
@@ -547,6 +669,12 @@ function tick(now) {
         document.getElementById('fall-screen').classList.add('visible');
       }
     }
+    const impact = landingStrength(prev, player);
+    if (impact > 0) {
+      landingAge = 0;
+      landingImpact = impact;
+      snow.land(impact);
+    }
     if (player.airborne && !prev.airborne) hud.flash('¡Salto!', 800);
     if (race.status === 'finished' && !finishShown) finish();
   }
@@ -564,7 +692,7 @@ function tick(now) {
     c.fig.rotation.z = wave * 0.012;
   }
 
-  updateCamera();
+  updateCamera(started && !paused && race.status !== 'finished' ? dt : 0);
   const gliding = started && !paused && race.status !== 'finished'
     && !player.airborne && !player.fallen;
   snow.update(gliding ? player.speed : 0, steerSmooth, gliding);
@@ -572,6 +700,12 @@ function tick(now) {
   hud.setSpeed((player.fallen ? crashSpeed : player.speed) * 3.6);
   hud.setProgress(player.s, track.length);
   renderer.render(scene, camera);
+  if (started && !paused && startSequence.clockMs == null) {
+    // El primer pitido y su segundo completo comienzan con la escena preparada.
+    startSequence = presentStartSequence(startSequence, performance.now());
+    snow.startSignal(false);
+    lastStartCue = startSequence.cue;
+  }
 }
 requestAnimationFrame(tick);
 
@@ -581,7 +715,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-window.__game = { state: () => ({ player, race, paused }), trackLength: 0 };
+window.__game = { state: () => ({ player, race, paused, startSequence }), trackLength: 0 };
 loadTrack(TRACKS[selectedTrack]);
 
 // Los runs de verificación (autopilot) saltan los menús y arrancan directos.
@@ -1271,14 +1405,14 @@ function makeSkiGeometry() {
     const t = (1 - Math.cos(Math.PI * i / rows)) / 2;
     const rocker = Math.max(0, (t - 0.64) / 0.36);
     const tail = Math.max(0, (0.10 - t) / 0.10);
-    const y = 0.39 * rocker ** 2.3 + 0.025 * tail ** 2;
+    const y = 0.14 * rocker ** 2.3 + 0.018 * tail ** 2;
     let width = 0.076 + 0.027 * ((t - 0.4) / 0.6) ** 2;
     // Nariz elíptica que cierra tangencialmente, sin un frente plano.
     if (t > 0.91) width *= Math.sqrt(Math.max(0, 1 - ((t - 0.91) / 0.09) ** 2));
     if (t < 0.035) width *= Math.sqrt(Math.max(0, 1 - ((0.035 - t) / 0.035) ** 2));
     for (let j = 0; j <= section.length; j++) {
       const [x, h] = section[j % section.length];
-      positions.push(x * width, y + h, 0.35 - t * 1.55);
+      positions.push(x * width, y + h, 0.45 - t * 2.05);
       uvs.push((x + 1) / 2, t);
     }
   }
@@ -1356,21 +1490,64 @@ function makeSkiMaterials() {
   ];
 }
 
-// Skis en primera persona, colgados de la cámara; se cantean al girar.
+// Esquís en el mundo, apoyados en la pendiente; se cantean al girar.
 function makeSkis() {
   const group = new THREE.Group();
   const mat = makeSkiMaterials();
   const geo = makeSkiGeometry();
-  for (const x of [-0.24, 0.24]) {
+  for (const x of [-0.215, 0.215]) {
     const ski = new THREE.Mesh(geo, mat);
     ski.position.x = x;
-    ski.scale.setScalar(0.78); // más pequeños: ocupan menos pantalla
+    ski.castShadow = false; // sombra de contacto independiente del sesgo del paisaje
+    ski.receiveShadow = true;
     group.add(ski);
   }
-  group.position.set(0, -1.00, -0.35); // 5 cm más arriba: asoman un poco más en pantalla
   // Cada esquí cantea sobre SU propio eje longitudinal (como un esquiador real),
   // no el par entero alrededor de un centro común.
   group.userData.skis = group.children;
+  return group;
+}
+
+// Máscara suave: el cuerpo toca la nieve y el rocker pierde contacto en la punta.
+function makeSkiContactShadows() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const pixels = ctx.createImageData(64, 256);
+  for (let y = 0; y < 256; y++) {
+    const t = 1 - y / 255;
+    const lengthFade = THREE.MathUtils.smoothstep(t, 0, 0.09)
+      * (1 - THREE.MathUtils.smoothstep(t, 0.63, 1));
+    for (let x = 0; x < 64; x++) {
+      const across = Math.abs(x / 63 * 2 - 1);
+      const alpha = (1 - THREE.MathUtils.smoothstep(across, 0.3, 1)) * lengthFade;
+      pixels.data.set([28, 48, 68, Math.round(alpha * 90)], (y * 64 + x) * 4);
+    }
+  }
+  ctx.putImageData(pixels, 0, 0);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.MeshBasicMaterial({ map, transparent: true,
+    depthWrite: false, side: THREE.DoubleSide, polygonOffset: true,
+    polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  const group = new THREE.Group();
+  for (let k = 0; k < 2; k++) {
+    const geo = new THREE.BufferGeometry();
+    const uv = [], indices = [];
+    for (let row = 0; row <= 16; row++) {
+      uv.push(0, row / 16, 1, row / 16);
+      if (row < 16) {
+        const i = row * 2;
+        indices.push(i, i + 1, i + 2, i + 1, i + 3, i + 2);
+      }
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(34 * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(indices);
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.frustumCulled = false; // vértices actualizados alrededor del jugador
+    group.add(mesh);
+  }
   return group;
 }
 
@@ -1646,6 +1823,55 @@ function makeWoodTexture() {
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+// Portillón de salida: pasillo estrecho, protecciones y brazo abatible.
+function makeStartGate(track, s) {
+  const gate = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc5d3de, metalness: 0.65, roughness: 0.32 });
+  const padding = new THREE.MeshStandardMaterial({ color: 0xc54435, roughness: 0.9 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x16384b, roughness: 0.8 });
+  const barMaterial = new THREE.MeshStandardMaterial({ color: 0xf4db76, roughness: 0.55 });
+  const add = (geo, material, x, y, z, parent = gate) => {
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+  for (const side of [-1, 1]) {
+    add(new THREE.CylinderGeometry(0.06, 0.06, 3.15, 10), steel, side * 1.3, 1.575, 0);
+    add(new THREE.CylinderGeometry(0.17, 0.17, 1.35, 12), padding, side * 1.3, 0.675, 0);
+    // Vallas del cajón y asas para impulsarse al salir.
+    add(new THREE.BoxGeometry(0.06, 0.9, 3.8), dark, side * 1.65, 0.55, 1.6);
+    add(new THREE.CylinderGeometry(0.045, 0.045, 1.15, 8), steel, side * 1.02, 0.95, 0.35);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024; canvas.height = 192;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#12364b'; ctx.fillRect(0, 0, 1024, 192);
+  ctx.fillStyle = '#e65b44'; ctx.fillRect(0, 174, 1024, 18);
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 86px system-ui';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('SALIDA', 512, 84);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  add(new THREE.BoxGeometry(3.35, 0.64, 0.16), dark, 0, 2.86, 0);
+  add(new THREE.PlaneGeometry(3.3, 0.62), new THREE.MeshBasicMaterial({ map: texture }), 0, 2.86, 0.09);
+  const arm = new THREE.Group();
+  arm.position.set(-1.3, 0.86, 0.05);
+  add(new THREE.CylinderGeometry(0.035, 0.035, 2.6, 10), barMaterial, 1.3, 0, 0, arm).rotation.z = Math.PI / 2;
+  gate.add(arm);
+  add(new THREE.BoxGeometry(0.34, 0.48, 0.2), dark, 1.3, 1.9, 0.04);
+  const light = add(new THREE.SphereGeometry(0.105, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff674f }), 1.3, 1.9, 0.16);
+  gate.userData = { arm, light };
+  const frame = track.frameAt(s);
+  const right = frame.side.clone().negate();
+  const up = new THREE.Vector3().crossVectors(right, frame.tan).normalize();
+  gate.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, frame.tan.clone().negate()));
+  gate.position.copy(track.toWorld(s, 0, snowRelief(s, 0, track.width)));
+  return gate;
 }
 
 // Arco de madera: pilares, travesaño apoyado con solape, tirantes y banderines.

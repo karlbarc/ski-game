@@ -2,6 +2,17 @@ export function createHud(doc = document) {
   const el = (id) => doc.getElementById(id);
   let msgTimer = 0;
   return {
+    setCountdown(cue) {
+      const panel = el('race-start');
+      panel.hidden = cue == null;
+      if (cue == null || panel.dataset.cue === String(cue)) return;
+      panel.dataset.cue = String(cue);
+      el('start-number').textContent = cue === 0 ? '¡YA!' : cue;
+      el('start-caption').textContent = cue === 0 ? 'PISTA LIBRE' : 'PREPÁRATE PARA SALIR';
+      for (const [i, light] of [...panel.querySelectorAll('.start-light')].entries()) {
+        light.classList.toggle('lit', cue === 0 || i < 4 - cue);
+      }
+    },
     setTimer(text) { el('timer-text').textContent = text; },
     setProgress(s, total) {
       el('progress').textContent = `${Math.round(Math.min(Math.max(s, 0), total))} m`;

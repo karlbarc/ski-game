@@ -210,6 +210,56 @@ export function createSnowSound() {
       g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
       src.stop(ctx.currentTime + 0.6);
     },
+    // Señal de salida: tres pitidos cortos y uno final más alto y largo.
+    startSignal(go = false) {
+      if (!ctx || muted || bgHidden || document.hidden) return;
+      const t = ctx.currentTime;
+      const oscillator = ctx.createOscillator();
+      const envelope = ctx.createGain();
+      const duration = go ? 0.48 : 0.16;
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(go ? 1480 : 980, t);
+      envelope.gain.setValueAtTime(0, t);
+      envelope.gain.linearRampToValueAtTime(0.20, t + 0.008);
+      envelope.gain.setValueAtTime(0.20, t + duration - 0.04);
+      envelope.gain.linearRampToValueAtTime(0, t + duration);
+      oscillator.connect(envelope);
+      envelope.connect(master);
+      oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
+      oscillator.start(t);
+      oscillator.stop(t + duration);
+    },
+    // Golpe grave y crujido corto de nieve al aterrizar, según la caída.
+    land(strength) {
+      if (!ctx || muted || bgHidden || document.hidden) return;
+      const impact = Math.max(0, Math.min(1, strength));
+      const t = ctx.currentTime;
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.24), ctx.sampleRate);
+      const samples = buffer.getChannelData(0);
+      for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const lowpass = ctx.createBiquadFilter();
+      lowpass.type = 'lowpass';
+      lowpass.frequency.setValueAtTime(900 + impact * 800, t);
+      const envelope = ctx.createGain();
+      envelope.gain.setValueAtTime(0, t);
+      envelope.gain.linearRampToValueAtTime(0.18 + impact * 0.4, t + 0.008);
+      envelope.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+      source.connect(lowpass); lowpass.connect(envelope); envelope.connect(master);
+      source.onended = () => { source.disconnect(); lowpass.disconnect(); envelope.disconnect(); };
+      source.start(t); source.stop(t + 0.24);
+      const thump = ctx.createOscillator();
+      const thumpGain = ctx.createGain();
+      thump.frequency.setValueAtTime(100, t);
+      thump.frequency.exponentialRampToValueAtTime(42, t + 0.15);
+      thumpGain.gain.setValueAtTime(0, t);
+      thumpGain.gain.linearRampToValueAtTime(impact * 0.22, t + 0.006);
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      thump.connect(thumpGain); thumpGain.connect(master);
+      thump.onended = () => { thump.disconnect(); thumpGain.disconnect(); };
+      thump.start(t); thump.stop(t + 0.18);
+    },
     // speed en m/s; steer en [-1,1]; grounded=false silencia (aire/caída/pausa).
     update(speed, steer, grounded) {
       if (!gain) return;

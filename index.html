@@ -129,6 +129,14 @@
     .welcome-panel { padding: 20px; }
   }
   @media (max-height: 720px) { #start-screen, #finish-screen, #fall-screen, #pause-screen { justify-content: flex-start; padding-top: 64px; } }
+  #race-start { position: fixed; inset: 32% 0 auto; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 12px; pointer-events: none; color: white; text-align: center; text-shadow: 0 3px 18px #071c2baa; }
+  #start-caption { font-size: clamp(.7rem, 2.5vw, .9rem); letter-spacing: .2em; font-weight: 800; background: #0c263be0; padding: 9px 16px; border-radius: 4px; }
+  #start-number { font-size: clamp(5rem, 18vw, 9rem); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+  .start-lights { display: flex; gap: 12px; padding: 10px 16px; border-radius: 30px; background: #102b3ceb; }
+  .start-light { width: 15px; height: 15px; border-radius: 50%; background: #415363; }
+  .start-light.lit { background: #ff785e; box-shadow: 0 0 14px #ff785e70; }
+  #race-start[data-cue="0"] { color: #b9ffe0; }
+  #race-start[data-cue="0"] .start-light.lit { background: #77edb6; box-shadow: 0 0 14px #77edb670; }
 </style>
 </head>
 <body>
@@ -138,6 +146,11 @@
 </div>
 <button id="btn-mute-menu" aria-label="Sonido">🔊</button>
 <div id="message"></div>
+<div id="race-start" hidden role="status" aria-live="assertive" aria-atomic="true">
+  <span id="start-caption">PREPÁRATE PARA SALIR</span>
+  <strong id="start-number">3</strong>
+  <div class="start-lights" aria-hidden="true"><i class="start-light"></i><i class="start-light"></i><i class="start-light"></i></div>
+</div>
 <div id="start-screen" class="overlay visible">
   <h1 id="game-logo"><span class="logo-text">Downhill Ski Challenge</span><span class="logo-emoji">⛷️</span></h1>
   <form id="player-form" class="welcome-panel">
