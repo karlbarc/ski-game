@@ -57,8 +57,11 @@ scene.fog = new THREE.FogExp2(0xd6e6f5, 0.0042);
 // Luz de cielo: la nieve en sombra se ilumina de azul (rebote del cielo) y
 // el rebote del suelo devuelve blanco cálido. Es la firma de la luz alpina.
 scene.add(new THREE.HemisphereLight(0x8fb4e4, 0xeee2d0, 1.3)); // relleno frío: tiñe de azul lo que queda en sombra
-const sun = new THREE.DirectionalLight(0xffe6b8, 3.1); // sol bajo, dorado
-sun.position.set(110, 58, -34); // sol bajo: luz rasante que alarga sombras
+// Dirección común para la luz, el disco solar y la iluminación horneada de
+// las montañas. Más altura acorta las sombras sin volver la escena cenital.
+const SUN_OFFSET = new THREE.Vector3(100, 84, -30);
+const sun = new THREE.DirectionalLight(0xffe6b8, 3.1);
+sun.position.copy(SUN_OFFSET);
 sun.castShadow = true;
 // El sol sigue al jugador (ver updateCamera): el volumen de sombra es una caja
 // pequeña alrededor de la cámara, así se gana resolución donde de verdad se ve.
@@ -532,8 +535,8 @@ function updateCamera(visualDt) {
   // (es donde mira la cámara), manteniendo el mismo ángulo de sol.
   const focus = track.toWorld(player.s + 45, player.lat, 0);
   sun.target.position.copy(focus);
-  // Sol bajo sobre el horizonte: rasante sobre la nieve, sombras largas.
-  sun.position.set(focus.x + 100, focus.y + 54, focus.z - 30);
+  // La luz sigue al jugador conservando un ángulo alpino más elevado.
+  sun.position.copy(focus).add(SUN_OFFSET);
 
   skis.visible = !player.fallen;
   const lengthScale = skiLengthScale(camera.fov);
@@ -757,7 +760,7 @@ function makeSky(center) {
 function makeMountains(center) {
   const group = new THREE.Group();
   const rng = mulberry32(2024);
-  const sunDirection = new THREE.Vector3(110, 58, -34).normalize();
+  const sunDirection = SUN_OFFSET.clone().normalize();
   const snowColor = new THREE.Color(0xf0f4f7);
   const rockColor = new THREE.Color(0x777d86);
   const hazeColor = new THREE.Color(0xc2d5e6);
@@ -892,7 +895,7 @@ function makeSun(center) {
     map: tex, transparent: true, depthWrite: false, depthTest: false,
     blending: THREE.AdditiveBlending, fog: false,
   }));
-  const dir = new THREE.Vector3(80, 120, -40).normalize();
+  const dir = SUN_OFFSET.clone().normalize();
   sprite.position.copy(center).addScaledVector(dir, 1500);
   sprite.scale.setScalar(340);
   sprite.renderOrder = -1; // detrás de todo lo sólido
