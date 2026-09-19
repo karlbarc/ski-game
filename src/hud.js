@@ -1,5 +1,16 @@
 export function createHud(doc = document) {
   const el = (id) => doc.getElementById(id);
+  // El render corre hasta 60 veces por segundo, pero el texto no necesita esa
+  // cadencia. Limitar las escrituras al DOM evita recalcular estilos y layout
+  // en cada frame, algo especialmente costoso en móviles modestos.
+  const DYNAMIC_UPDATE_MS = 100;
+  let lastTimerUpdate = -Infinity;
+  let lastSpeedUpdate = -Infinity;
+  let lastProgressUpdate = -Infinity;
+  let timerText = null;
+  let speedText = null;
+  let speedWidth = null;
+  let progressText = null;
   let msgTimer = 0;
   return {
     setCountdown(cue) {
@@ -13,14 +24,35 @@ export function createHud(doc = document) {
         light.classList.toggle('lit', cue === 0 || i < 4 - cue);
       }
     },
-    setTimer(text) { el('timer-text').textContent = text; },
-    setProgress(s, total) {
-      el('progress').textContent = `${Math.round(Math.min(Math.max(s, 0), total))} m`;
+    setTimer(text, now = performance.now()) {
+      if (now - lastTimerUpdate < DYNAMIC_UPDATE_MS) return;
+      lastTimerUpdate = now;
+      if (text === timerText) return;
+      timerText = text;
+      el('timer-text').textContent = text;
     },
-    setSpeed(kmh) {
+    setProgress(s, total, now = performance.now()) {
+      if (now - lastProgressUpdate < DYNAMIC_UPDATE_MS) return;
+      lastProgressUpdate = now;
+      const text = `${Math.round(Math.min(Math.max(s, 0), total))} m`;
+      if (text === progressText) return;
+      progressText = text;
+      el('progress').textContent = text;
+    },
+    setSpeed(kmh, now = performance.now()) {
+      if (now - lastSpeedUpdate < DYNAMIC_UPDATE_MS) return;
+      lastSpeedUpdate = now;
       const pct = Math.min(100, (kmh / 120) * 100); // ~115 km/h es la punta real del juego
-      el('speed-fill').style.width = `${pct}%`;
-      el('speed-value').textContent = Math.round(kmh);
+      const width = `${pct}%`;
+      const text = String(Math.round(kmh));
+      if (width !== speedWidth) {
+        speedWidth = width;
+        el('speed-fill').style.width = width;
+      }
+      if (text !== speedText) {
+        speedText = text;
+        el('speed-value').textContent = text;
+      }
     },
     flash(text, ms = 1500) {
       const m = el('message');

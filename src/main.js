@@ -91,6 +91,8 @@ scene.add(skiContactShadows);
 scene.add(camera);
 
 const TRACKS = { verde, azul, negra, alpina };
+const PISTE_EDGE_COLOR = 0x50bced;
+const JUMP_FLAG_COLOR = 0xe6534d;
 const pisteSnow = makeSnowSurface(true);
 const powderSnow = makeSnowSurface(false);
 
@@ -168,6 +170,8 @@ function buildMeta() {
   };
 }
 let crowd = [];      // público animado junto a la meta (lo puebla makeCrowd)
+const jumpPowderGeometry = new THREE.SphereGeometry(0.16, 6, 4);
+const jumpPowderBursts = [];
 
 const hud = createHud();
 const controls = createControls();
@@ -260,10 +264,11 @@ document.addEventListener('pointerdown', () => {
 }, { once: true });
 document.getElementById('btn-menu-fall').addEventListener('click', goToMenu);
 
-// Ranking global: resumen (top 3 por pista) y detalle al tocar una pista.
+// Ranking global: primero se elige entre las pistas donde el jugador ya tiene marca.
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let rankDetailOpen = false;
+let rankViewToken = 0;
 
 function rankRowsHtml(rows, mine, me) {
   let body = rows.length === 0
@@ -281,45 +286,92 @@ function rankRowsHtml(rows, mine, me) {
 
 async function showRanking() {
   rankDetailOpen = false;
+  rankViewToken += 1;
   document.getElementById('track-screen').classList.remove('visible');
   const list = document.getElementById('rank-list');
+  const title = document.getElementById('rank-title');
+  const subtitle = document.getElementById('rank-subtitle');
+  const back = document.getElementById('btn-back-tracks');
   document.getElementById('rank-screen').classList.add('visible');
-  list.innerHTML = '<p class="rank-empty">Cargando…</p>';
-  const me = playerId();
-  const sections = await Promise.all(Object.entries(TRACKS).map(async ([key, data]) => {
-    try {
-      const [rows, mine] = await Promise.all([fetchTop(data.name, 3), fetchMyRank(data.name)]);
-      return `<div class="rank-track rank-click" data-track="${key}" role="button" tabindex="0">`
-        + `<h2>${data.emoji} ${data.name}<small>ver todo ›</small></h2>`
-        + rankRowsHtml(rows, mine, me) + '</div>';
-    } catch {
-      return `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2><p class="rank-empty">Sin conexión</p></div>`;
-    }
-  }));
-  if (rankDetailOpen) return; // el usuario ya entró a un detalle mientras cargaba
-  list.innerHTML = sections.join('');
-  for (const el of list.querySelectorAll('.rank-click')) {
+  title.textContent = 'Elige una pista';
+  subtitle.textContent = 'Consulta el ranking de las pistas donde ya tienes una marca.';
+  back.textContent = '‹ Volver a las pistas';
+  list.className = 'rank-selector';
+
+  const rankedTracks = Object.entries(TRACKS)
+    .map(([key, data]) => ({ key, data, best: loadBest(localStorage, data.name) }))
+    .filter(({ best }) => best != null);
+
+  if (rankedTracks.length === 0) {
+    list.className = '';
+    list.innerHTML = '<div class="rank-empty-state"><span class="rank-empty-icon">🏁</span>'
+      + '<h2>Aún no tienes marcas</h2><p>Completa una pista para desbloquear su ranking.</p></div>';
+    return;
+  }
+
+  list.innerHTML = rankedTracks.map(({ key, data, best }) => `
+    <button class="rank-choice" data-track="${key}" style="--accent:${data.accent}">
+      <span class="rank-choice-top"><span class="rank-choice-emoji">${data.emoji}</span><span class="rank-saved">Marca guardada</span></span>
+      <span class="rank-choice-name">${data.name}</span>
+      <span class="rank-times">
+        <span class="rank-time-block"><span class="rank-choice-label">Tu mejor tiempo</span><span class="rank-choice-time">${formatTime(best)}</span></span>
+        <span class="rank-time-block"><span class="rank-choice-label">Mejor global</span><span class="rank-global-time" data-track="${key}">Consultando…</span></span>
+      </span>
+      <span class="rank-gap" data-track="${key}">Calculando diferencia…</span>
+      <span class="rank-choice-footer"><span class="rank-position" data-track="${key}">Consultando posición…</span><span class="rank-choice-open">Ver ranking ›</span></span>
+    </button>`).join('');
+
+  for (const el of list.querySelectorAll('.rank-choice')) {
     el.addEventListener('click', () => showTrackRanking(el.dataset.track));
-    el.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        showTrackRanking(el.dataset.track);
-      }
-    });
+  }
+  for (const { key, data, best } of rankedTracks) {
+    Promise.all([fetchTop(data.name, 1), fetchMyRank(data.name)])
+      .then(([rows, mine]) => {
+        const position = list.querySelector(`.rank-position[data-track="${key}"]`);
+        const globalTime = list.querySelector(`.rank-global-time[data-track="${key}"]`);
+        const gap = list.querySelector(`.rank-gap[data-track="${key}"]`);
+        if (position) position.textContent = mine ? `Puesto #${mine.rank} global` : 'Marca aún no publicada';
+        if (!globalTime || !gap) return;
+        if (rows.length === 0) {
+          globalTime.textContent = '—';
+          gap.textContent = 'Sé el primero en el ranking';
+          return;
+        }
+        globalTime.textContent = formatTime(rows[0].time_cs / 100);
+        const deltaCs = Math.max(0, Math.round(best * 100) - rows[0].time_cs);
+        gap.textContent = deltaCs === 0 ? '¡Tienes el mejor tiempo!' : `+${(deltaCs / 100).toFixed(2).replace('.', ',')} s del mejor`;
+        gap.classList.toggle('is-leading', deltaCs === 0);
+      })
+      .catch(() => {
+        const position = list.querySelector(`.rank-position[data-track="${key}"]`);
+        const globalTime = list.querySelector(`.rank-global-time[data-track="${key}"]`);
+        const gap = list.querySelector(`.rank-gap[data-track="${key}"]`);
+        if (position) position.textContent = 'Ranking no disponible';
+        if (globalTime) globalTime.textContent = '—';
+        if (gap) gap.textContent = 'Sin conexión';
+      });
   }
 }
 
 async function showTrackRanking(key) {
   rankDetailOpen = true;
+  const viewToken = ++rankViewToken;
   const data = TRACKS[key];
   const list = document.getElementById('rank-list');
+  const best = loadBest(localStorage, data.name);
+  document.getElementById('rank-title').textContent = `${data.emoji} ${data.name}`;
+  document.getElementById('rank-subtitle').textContent = `Tu mejor tiempo: ${best == null ? '—' : formatTime(best)}`;
+  document.getElementById('btn-back-tracks').textContent = '‹ Elegir otra pista';
+  list.className = 'rank-detail';
   list.innerHTML = '<p class="rank-empty">Cargando…</p>';
   try {
     const me = playerId();
     const [rows, mine] = await Promise.all([fetchTop(data.name, 50), fetchMyRank(data.name)]);
-    list.innerHTML = `<div class="rank-track"><h2>${data.emoji} ${data.name}</h2>`
+    if (viewToken !== rankViewToken) return;
+    list.innerHTML = '<div class="rank-track"><h2>Clasificación global<small>Mejores tiempos</small></h2>'
       + rankRowsHtml(rows, mine, me) + '</div>';
   } catch {
+    if (viewToken !== rankViewToken) return;
     list.innerHTML = '<p class="rank-empty">Sin conexión</p>';
   }
 }
@@ -369,10 +421,10 @@ function buildTrackMenu() {
       <span class="track-top"><span class="track-emoji">${data.emoji}</span><span class="track-level">${data.difficulty}</span></span>
       <svg class="track-preview" viewBox="0 0 240 72" aria-hidden="true"><path d="M0 72 52 14 85 48 136 0 204 72Z" fill="#ffffff09"/><path d="m92 72 75-49 73 49Z" fill="#ffffff08"/><path d="M125 6 C80 18 155 26 113 39 S65 57 120 67" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/><circle cx="125" cy="6" r="4" fill="#fff"/><circle cx="120" cy="67" r="4" fill="#fff"/></svg>
       <span class="track-title">${data.name}</span>
-      ${data.description ? `<span class="track-description">${data.description}</span>` : ''}
+      <span class="track-description${data.description ? '' : ' track-description-spacer'}">${data.description || ''}</span>
       <span class="track-stats">${m.length} m · ${m.slope}% pendiente<br>${m.obstacles} obstáculos · ${m.jumps} saltos</span>
-      <span class="track-best">${best == null ? 'Sin tiempo todavía' : `Récord: ${formatTime(best)}`}</span>
-      <span class="track-play">Bajar ↗</span>`;
+      <span class="track-best"><small>Tu mejor tiempo</small><strong>${best == null ? 'Sin marca todavía' : formatTime(best)}</strong></span>
+      <span class="track-play"><span>Bajar esta pista</span><span class="track-play-arrow" aria-hidden="true">→</span></span>`;
     card.addEventListener('click', () => startRun(key));
     list.appendChild(card);
   }
@@ -434,6 +486,7 @@ function restart() {
   runMaxSpeed = 0;
   crashSpeed = 0;
   runFrames = 0;
+  clearJumpPowder();
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
   document.getElementById('fall-screen').classList.remove('visible');
@@ -506,9 +559,9 @@ function finish() {
   const bestSpeed = loadBestSpeed(localStorage, track.data.name);
   document.getElementById('finish-track').textContent = `Pista ${track.data.name}`;
   hud.showFinish(
-    `Tiempo: ${formatTime(time)}`,
-    `Mejor: ${best == null ? '—' : formatTime(best)}`,
-    `Vel. máx: ${maxKmh} km/h (récord: ${bestSpeed == null ? '—' : `${bestSpeed} km/h`})`,
+    formatTime(time),
+    best == null ? '—' : formatTime(best),
+    `${maxKmh} km/h · Récord ${bestSpeed == null ? '—' : `${bestSpeed} km/h`}`,
     isRecord,
   );
 }
@@ -524,9 +577,9 @@ function updateCamera(visualDt) {
   const dir = f.tan.clone().multiplyScalar(Math.cos(player.heading))
     .addScaledVector(f.side, Math.sin(player.heading));
   camera.lookAt(pos.clone().add(dir));
-  if (!player.fallen) camera.rotateX(-0.12 - landing.pitch); // la mirada incluye la nieve y las palas
+  if (!player.fallen) camera.rotateX((player.airborne ? -0.045 : -0.12) - landing.pitch);
   camera.rotateZ(player.fallen ? 0.5 : steerSmooth * 0.16);
-  const fov = Math.min(95, 70 + player.speed * 0.9);
+  const fov = Math.min(98, 70 + player.speed * 0.9 + (player.airborne ? 4 : 0));
   if (Math.abs(fov - camera.fov) > 0.1) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
@@ -669,8 +722,12 @@ function tick(now) {
       } else {
         crashSpeed = prev.speed; // el marcador congela la velocidad del impacto
         race = pauseRace(race, now);
+        const fallDistance = Math.round(Math.min(player.s, track.length));
+        const fallProgress = Math.round((fallDistance / track.length) * 100);
         document.getElementById('fall-meters').textContent =
-          `Avanzaste ${Math.round(Math.min(player.s, track.length))} m de ${Math.round(track.length)} m`;
+          `Avanzaste ${fallDistance} m de ${Math.round(track.length)} m`;
+        document.getElementById('fall-progress-fill').style.width = `${fallProgress}%`;
+        document.querySelector('.fall-progress-track').setAttribute('aria-valuenow', fallProgress);
         document.getElementById('fall-screen').classList.add('visible');
       }
     }
@@ -679,8 +736,16 @@ function tick(now) {
       landingAge = 0;
       landingImpact = impact;
       snow.land(impact);
+      spawnJumpPowder(track.toWorld(player.s, player.lat,
+        snowRelief(player.s, player.lat, track.width) + 0.08), 0.8 + impact);
+      hud.flash('¡Buen aterrizaje!', 900);
     }
-    if (player.airborne && !prev.airborne) hud.flash('¡Salto!', 800);
+    if (player.airborne && !prev.airborne) {
+      snow.jump(player.speed / PARAMS.maxSpeed);
+      spawnJumpPowder(track.toWorld(player.s - 0.5, player.lat,
+        snowRelief(player.s - 0.5, player.lat, track.width) + PARAMS.rampHeight), 0.8);
+      hud.flash('¡En el aire!', 1100);
+    }
     if (race.status === 'finished' && !finishShown) finish();
   }
 
@@ -698,12 +763,13 @@ function tick(now) {
   }
 
   updateCamera(started && !paused && race.status !== 'finished' ? dt : 0);
+  updateJumpPowder(started && !paused ? Math.min(realDt, 0.05) : 0);
   const gliding = started && !paused && race.status !== 'finished'
     && !player.airborne && !player.fallen;
   snow.update(gliding ? player.speed : 0, steerSmooth, gliding);
-  hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(race.elapsed));
-  hud.setSpeed((player.fallen ? crashSpeed : player.speed) * 3.6);
-  hud.setProgress(player.s, track.length);
+  hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(race.elapsed), now);
+  hud.setSpeed((player.fallen ? crashSpeed : player.speed) * 3.6, now);
+  hud.setProgress(player.s, track.length, now);
   renderer.render(scene, camera);
   if (started && !paused && startSequence.clockMs == null) {
     // El primer pitido y su segundo completo comienzan con la escena preparada.
@@ -1129,7 +1195,7 @@ function makeRibbon(track, latA, latB, surface) {
   // otra malla que pueda flotar o parpadear sobre la superficie en las curvas.
   mesh.material.onBeforeCompile = (shader) => {
     shader.uniforms.sprayHalfWidth = { value: track.width / 2 };
-    shader.uniforms.sprayColor = { value: new THREE.Color(0x50bced) };
+    shader.uniforms.sprayColor = { value: new THREE.Color(PISTE_EDGE_COLOR) };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vSprayCoord;')
       .replace('#include <uv_vertex>', '#include <uv_vertex>\nvSprayCoord = uv * 4.0;');
@@ -1311,8 +1377,10 @@ function treeSpecies() {
       const patch = valueNoise(pos.getX(i) * 3 + seed, pos.getZ(i) * 3 + pos.getY(i));
       // Color real de nieve sobre las caras superiores; las acículas quedan
       // oscuras debajo. No se multiplica blanco por verde ni se sobreexpone.
-      const cover = THREE.MathUtils.smoothstep(normals.getY(i), 0.25, 0.8)
-        * THREE.MathUtils.smoothstep(patch, 0.20, 0.65);
+      // Solo quedan pequeñas acumulaciones en las caras casi horizontales.
+      // Así la silueta verde se separa con claridad de la nieve del entorno.
+      const cover = THREE.MathUtils.smoothstep(normals.getY(i), 0.52, 0.88)
+        * THREE.MathUtils.smoothstep(patch, 0.48, 0.76);
       color.copy(needles).multiplyScalar(0.7 + patch * 0.55).lerp(snow, cover);
       colors.push(color.r, color.g, color.b);
     }
@@ -1587,8 +1655,10 @@ function makeRocks(track) {
       const grain = valueNoise(x * 17 + seed, z * 17 + y * 4);
       const vein = valueNoise(x * 6 + y * 12 + seed, z * 3);
       color.copy(stone).lerp(mineral, vein * 0.65).multiplyScalar(0.75 + grain * 0.4);
-      const cover = THREE.MathUtils.smoothstep(normals.getY(i), 0.35, 0.8)
-        * THREE.MathUtils.smoothstep(y + vein * 0.2, 0.02, 0.38);
+      // Nieve solo en las mesetas superiores: conserva la lectura mineral de
+      // la roca contra el terreno blanco.
+      const cover = THREE.MathUtils.smoothstep(normals.getY(i), 0.58, 0.9)
+        * THREE.MathUtils.smoothstep(y + vein * 0.2, 0.18, 0.5);
       color.lerp(snow, cover);
       colors.push(color.r, color.g, color.b);
     }
@@ -1650,6 +1720,57 @@ function makeRampGeometry(width, height, length) {
   return geometry;
 }
 
+function spawnJumpPowder(position, strength = 1) {
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xeaf7ff, transparent: true, opacity: 0.68, depthWrite: false,
+  });
+  const burst = new THREE.Group();
+  burst.position.copy(position);
+  burst.userData = { age: 0, material };
+  const count = LOW_END ? 8 : 14;
+  for (let i = 0; i < count; i++) {
+    const puff = new THREE.Mesh(jumpPowderGeometry, material);
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.45;
+    const radius = 0.18 + Math.random() * 0.55;
+    puff.position.set(Math.cos(angle) * radius, Math.random() * 0.18, Math.sin(angle) * radius);
+    puff.scale.setScalar(0.65 + Math.random() * 0.9);
+    puff.userData.velocity = new THREE.Vector3(
+      Math.cos(angle) * (0.7 + Math.random() * 1.3) * strength,
+      (0.55 + Math.random() * 1.2) * strength,
+      Math.sin(angle) * (0.7 + Math.random() * 1.3) * strength,
+    );
+    burst.add(puff);
+  }
+  scene.add(burst);
+  jumpPowderBursts.push(burst);
+}
+
+function updateJumpPowder(dt) {
+  for (let i = jumpPowderBursts.length - 1; i >= 0; i--) {
+    const burst = jumpPowderBursts[i];
+    burst.userData.age += dt;
+    for (const puff of burst.children) {
+      puff.position.addScaledVector(puff.userData.velocity, dt);
+      puff.userData.velocity.y -= 1.2 * dt;
+      puff.scale.multiplyScalar(1 + dt * 1.7);
+    }
+    burst.userData.material.opacity = Math.max(0, 0.68 * (1 - burst.userData.age / 0.72));
+    if (burst.userData.age >= 0.72) {
+      scene.remove(burst);
+      burst.userData.material.dispose();
+      jumpPowderBursts.splice(i, 1);
+    }
+  }
+}
+
+function clearJumpPowder() {
+  for (const burst of jumpPowderBursts) {
+    scene.remove(burst);
+    burst.userData.material.dispose();
+  }
+  jumpPowderBursts.length = 0;
+}
+
 function makeRamps(track) {
   const group = new THREE.Group();
   const template = makeRampGeometry(PARAMS.rampHalfWidth * 2, PARAMS.rampHeight, PARAMS.rampLength);
@@ -1657,8 +1778,30 @@ function makeRamps(track) {
     ...pisteSnow, vertexColors: true, roughness: 0.94,
     side: THREE.DoubleSide, shadowSide: THREE.FrontSide,
   });
-  const markerGeometry = new THREE.CylinderGeometry(0.045, 0.045, 1.25, 6);
-  const markerMaterial = new THREE.MeshStandardMaterial({ color: 0xe77b32, roughness: 0.85 });
+  const markerGeometry = new THREE.CylinderGeometry(0.065, 0.075, 2.2, 8);
+  const markerMaterial = new THREE.MeshStandardMaterial({ color: PISTE_EDGE_COLOR, roughness: 0.82 });
+  const flagMaterials = [
+    new THREE.MeshStandardMaterial({ color: JUMP_FLAG_COLOR, roughness: 0.78, side: THREE.DoubleSide }),
+    new THREE.MeshStandardMaterial({ color: JUMP_FLAG_COLOR, roughness: 0.78, side: THREE.DoubleSide }),
+  ];
+  const bandMaterial = new THREE.MeshBasicMaterial({ color: PISTE_EDGE_COLOR, side: THREE.DoubleSide });
+  const rampBand = (o, t, depth = 0.18) => {
+    const halfWidth = PARAMS.rampHalfWidth - 0.18;
+    const centerS = o.s - PARAMS.rampLength + t * PARAMS.rampLength;
+    const vertices = [];
+    for (const ds of [-depth / 2, depth / 2]) {
+      const s = centerS + ds;
+      const rampT = Math.max(0, Math.min(1, (s - (o.s - PARAMS.rampLength)) / PARAMS.rampLength));
+      for (const lat of [o.lat - halfWidth, o.lat + halfWidth]) {
+        const p = track.toWorld(s, lat, PARAMS.rampHeight * rampT + 0.025);
+        vertices.push(p.x, p.y, p.z);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex([0, 1, 2, 1, 3, 2]);
+    return new THREE.Mesh(geometry, bandMaterial);
+  };
   for (const o of track.obstacles) {
     if (o.type !== 'jump') continue;
     const centerS = o.s - PARAMS.rampLength / 2;
@@ -1673,12 +1816,32 @@ function makeRamps(track) {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.receiveShadow = true;
     group.add(mesh);
-    for (const side of [-1, 1]) {
-      const lat = o.lat + side * (PARAMS.rampHalfWidth + 0.95);
-      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-      marker.position.copy(track.toWorld(o.s, lat, snowRelief(o.s, lat, track.width) + 0.625));
-      group.add(marker);
+    for (const [index, t] of [0.18, 0.48, 0.78, 0.97].entries()) {
+      group.add(rampBand(o, t, index === 3 ? 0.32 : 0.14));
     }
+    const approachS = o.s - PARAMS.rampLength - 1.2;
+    const approach = new THREE.Group();
+    for (const side of [-1, 1]) {
+      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      const x = side * (PARAMS.rampHalfWidth + 0.9);
+      marker.position.set(x, 1.1, 0);
+      marker.castShadow = true;
+      approach.add(marker);
+      const flagShape = new THREE.Shape();
+      flagShape.moveTo(0, 0); flagShape.lineTo(side * 0.82, -0.22); flagShape.lineTo(0, -0.55);
+      const flag = new THREE.Mesh(new THREE.ShapeGeometry(flagShape), flagMaterials[side > 0 ? 0 : 1]);
+      flag.position.set(x, 2.05, 0.02);
+      approach.add(flag);
+    }
+    const frame = track.frameAt(approachS);
+    const right = frame.side.clone().negate();
+    const up = new THREE.Vector3().crossVectors(right, frame.tan).normalize();
+    approach.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+      right, up, frame.tan.clone().negate(),
+    ));
+    approach.position.copy(track.toWorld(approachS, o.lat,
+      snowRelief(approachS, o.lat, track.width)));
+    group.add(approach);
   }
   template.dispose();
   return group;

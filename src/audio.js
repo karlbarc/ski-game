@@ -276,6 +276,33 @@ export function createSnowSound() {
       thump.onended = () => { thump.disconnect(); thumpGain.disconnect(); };
       thump.start(t); thump.stop(t + 0.18);
     },
+    // Soplido ascendente al abandonar el labio de una rampa.
+    jump(speedRatio = 0.5) {
+      if (!ctx || muted || bgHidden || document.hidden) return;
+      const strength = Math.max(0.25, Math.min(1, speedRatio));
+      const t = ctx.currentTime;
+      const duration = 0.34;
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+      const samples = buffer.getChannelData(0);
+      for (let i = 0; i < samples.length; i++) {
+        const x = i / samples.length;
+        samples[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * x);
+      }
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(700, t);
+      filter.frequency.exponentialRampToValueAtTime(2200, t + duration);
+      filter.Q.value = 0.65;
+      const envelope = ctx.createGain();
+      envelope.gain.setValueAtTime(0, t);
+      envelope.gain.linearRampToValueAtTime(0.16 + strength * 0.22, t + 0.06);
+      envelope.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      source.connect(filter); filter.connect(envelope); envelope.connect(master);
+      source.onended = () => { source.disconnect(); filter.disconnect(); envelope.disconnect(); };
+      source.start(t); source.stop(t + duration);
+    },
     // speed en m/s; steer en [-1,1]; grounded=false silencia (aire/caída/pausa).
     update(speed, steer, grounded) {
       if (!gain) return;
