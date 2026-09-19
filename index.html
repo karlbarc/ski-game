@@ -2,13 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#071c2b">
 <title>Downhill Ski Challenge</title>
 <style>
   @font-face { font-family: 'Titan One'; src: url('assets/fonts/titan-one.woff2') format('woff2'); font-display: swap; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; overflow: hidden; font-family: system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
-  canvas { display: block; }
+  html, body { height: 100%; min-height: 100dvh; overflow: hidden; background: #071c2b; font-family: system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
   .overlay { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: rgba(10, 30, 50, 0.75); color: #fff; text-align: center; z-index: 10; padding: 24px; }
   .overlay.visible { display: flex; }
   .overlay h1 { font-size: 2.05rem; font-family: 'Titan One', system-ui, sans-serif; font-weight: 400; letter-spacing: .5px; }

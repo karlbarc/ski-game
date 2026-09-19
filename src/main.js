@@ -29,6 +29,17 @@ try {
   document.getElementById('error-screen').classList.add('visible');
   throw e;
 }
+function visibleViewportSize() {
+  // En Android la barra del navegador puede cambiar sin disparar un resize de
+  // `window`. El visual viewport describe el espacio que el jugador ve de
+  // verdad y evita una franja del color por defecto bajo el canvas.
+  const viewport = window.visualViewport;
+  return {
+    width: Math.round(viewport?.width || innerWidth),
+    height: Math.round(viewport?.height || innerHeight),
+  };
+}
+let { width: viewportWidth, height: viewportHeight } = visibleViewportSize();
 // En móvil el presupuesto de GPU es mucho menor: bajamos resolución de sombra
 // y pixel ratio antes que arriesgar el framerate. `?quality=alta|baja` fuerza
 // el modo para poder comparar.
@@ -38,7 +49,7 @@ const LOW_END = qualityParam
   : (navigator.hardwareConcurrency || 4) <= 4 || /Android|iPhone|iPad/.test(navigator.userAgent);
 
 renderer.setPixelRatio(Math.min(devicePixelRatio, LOW_END ? 1.5 : 2));
-renderer.setSize(innerWidth, innerHeight);
+renderer.setSize(viewportWidth, viewportHeight);
 // Pipeline de color fotográfico: ACES comprime los altos (la nieve deja de
 // quemarse a blanco plano) y sRGB corrige el gamma de salida.
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -80,7 +91,7 @@ sun.shadow.normalBias = 0.35;
 scene.add(sun);
 scene.add(sun.target);
 
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 3000);
+const camera = new THREE.PerspectiveCamera(70, viewportWidth / viewportHeight, 0.1, 3000);
 const skis = makeSkis();
 let skiVisualPose = null;
 let landingAge = 1;
@@ -780,11 +791,14 @@ function tick(now) {
 }
 requestAnimationFrame(tick);
 
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+function resizeRenderer() {
+  ({ width: viewportWidth, height: viewportHeight } = visibleViewportSize());
+  camera.aspect = viewportWidth / viewportHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+  renderer.setSize(viewportWidth, viewportHeight);
+}
+window.addEventListener('resize', resizeRenderer);
+window.visualViewport?.addEventListener('resize', resizeRenderer);
 
 window.__game = { state: () => ({ player, race, paused, startSequence }), trackLength: 0 };
 loadTrack(TRACKS[selectedTrack]);
