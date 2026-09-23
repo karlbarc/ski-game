@@ -1808,7 +1808,7 @@ function makeRamps(track) {
   // GPU con menor precisión alternen entre una superficie y la otra (z-fighting).
   const bandMaterial = new THREE.MeshBasicMaterial({
     color: PISTE_EDGE_COLOR, side: THREE.DoubleSide, fog: false, toneMapped: false,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1,
   });
   const rampBand = (o, t, depth = 0.18) => {
     const halfWidth = PARAMS.rampHalfWidth - 0.18;
@@ -1818,7 +1818,9 @@ function makeRamps(track) {
       const s = centerS + ds;
       const rampT = Math.max(0, Math.min(1, (s - (o.s - PARAMS.rampLength)) / PARAMS.rampLength));
       for (const lat of [o.lat - halfWidth, o.lat + halfWidth]) {
-        const lift = LOW_END ? 0.10 : 0.06;
+        // Debe quedar bajo la base del esquí (el contacto se eleva ~2 cm),
+        // no como una barra flotando sobre el salto.
+        const lift = LOW_END ? 0.010 : 0.006;
         const p = track.toWorld(s, lat, PARAMS.rampHeight * rampT + lift);
         vertices.push(p.x, p.y, p.z);
       }
