@@ -4,7 +4,7 @@ import { verde } from './tracks/verde.js?v=1784480748';
 import { azul } from './tracks/azul.js?v=1784480748';
 import { negra } from './tracks/negra.js?v=1784480748';
 import { alpina } from './tracks/alpina.js?v=1784480748';
-import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from './player.js?v=1784480748';
+import { createPlayerState, stepPlayer, recoverPlayer, turnRateAtSpeed, PARAMS } from './player.js?v=1784480748';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
@@ -21,10 +21,18 @@ const GAME_VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
 const TIMESCALE = parseFloat(query.get('timescale') || '1');
+// El navegador integrado de escritorio suele compartir GPU con la app anfitriona
+// y tiene menos margen que Chrome. En ese entorno usamos el perfil ligero.
+const qualityParam = query.get('quality');
+const EMBEDDED_BROWSER = /Electron/i.test(navigator.userAgent);
+const LOW_END = qualityParam
+  ? qualityParam === 'baja'
+  : EMBEDDED_BROWSER || (navigator.hardwareConcurrency || 4) <= 4
+    || /Android|iPhone|iPad/.test(navigator.userAgent);
 
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias: !LOW_END });
 } catch (e) {
   document.getElementById('error-screen').classList.add('visible');
   throw e;
@@ -40,15 +48,10 @@ function visibleViewportSize() {
   };
 }
 let { width: viewportWidth, height: viewportHeight } = visibleViewportSize();
-// En móvil el presupuesto de GPU es mucho menor: bajamos resolución de sombra
-// y pixel ratio antes que arriesgar el framerate. `?quality=alta|baja` fuerza
-// el modo para poder comparar.
-const qualityParam = query.get('quality');
-const LOW_END = qualityParam
-  ? qualityParam === 'baja'
-  : (navigator.hardwareConcurrency || 4) <= 4 || /Android|iPhone|iPad/.test(navigator.userAgent);
+// En móvil y navegadores integrados, reducimos píxeles, antialiasing y sombras
+// antes que arriesgar el framerate. `?quality=alta|baja` permite comparar.
 
-renderer.setPixelRatio(Math.min(devicePixelRatio, LOW_END ? 1.5 : 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, LOW_END ? 1 : 2));
 renderer.setSize(viewportWidth, viewportHeight);
 // Pipeline de color fotográfico: ACES comprime los altos (la nieve deja de
 // quemarse a blanco plano) y sRGB corrige el gamma de salida.
@@ -76,7 +79,7 @@ sun.position.copy(SUN_OFFSET);
 sun.castShadow = true;
 // El sol sigue al jugador (ver updateCamera): el volumen de sombra es una caja
 // pequeña alrededor de la cámara, así se gana resolución donde de verdad se ve.
-sun.shadow.mapSize.set(LOW_END ? 1024 : 2048, LOW_END ? 1024 : 2048);
+sun.shadow.mapSize.set(LOW_END ? 512 : 2048, LOW_END ? 512 : 2048);
 // Caja de 160 m de lado: cubre lo que se ve con niebla y a 2048 px deja ~8 cm
 // por texel, suficiente para sombras de árbol nítidas sin artefactos.
 sun.shadow.camera.near = 1;
@@ -527,7 +530,8 @@ function resumeGame() {
 // lateral, esquivando el obstáculo sólido más cercano por delante.
 function autopilotSteer() {
   const ahead = track.frameAt(player.s + 8);
-  const steerFF = (ahead.curvature * player.speed) / PARAMS.turnRate;
+  const turnRate = turnRateAtSpeed(player.speed);
+  const steerFF = ahead.curvature * player.speed;
   let latTarget = 0;
   const room = track.width / 2 - 1.3; // margen para no rozar el borde al esquivar
   for (const o of track.obstacles) {
@@ -542,7 +546,8 @@ function autopilotSteer() {
     }
   }
   const headingTarget = Math.max(-0.5, Math.min(0.5, 0.06 * (latTarget - player.lat)));
-  return Math.max(-1, Math.min(1, steerFF + (headingTarget - player.heading) * 3));
+  const desiredTurnRate = steerFF + (headingTarget - player.heading) * 3;
+  return turnRate > 0 ? Math.max(-1, Math.min(1, desiredTurnRate / turnRate)) : 0;
 }
 
 function sendScore(name) {
@@ -1794,11 +1799,17 @@ function makeRamps(track) {
   });
   const markerGeometry = new THREE.CylinderGeometry(0.065, 0.075, 2.2, 8);
   const markerMaterial = new THREE.MeshStandardMaterial({ color: PISTE_EDGE_COLOR, roughness: 0.82 });
-  const flagMaterials = [
-    new THREE.MeshStandardMaterial({ color: JUMP_FLAG_COLOR, roughness: 0.78, side: THREE.DoubleSide }),
-    new THREE.MeshStandardMaterial({ color: JUMP_FLAG_COLOR, roughness: 0.78, side: THREE.DoubleSide }),
-  ];
-  const bandMaterial = new THREE.MeshBasicMaterial({ color: PISTE_EDGE_COLOR, side: THREE.DoubleSide });
+  // No dependen de luces ni niebla: en el perfil ligero conservan contraste
+  // incluso con sombras y resolución reducidas.
+  const flagMaterial = new THREE.MeshBasicMaterial({
+    color: JUMP_FLAG_COLOR, side: THREE.DoubleSide, fog: false, toneMapped: false,
+  });
+  // Las bandas están casi sobre la rampa. El offset de profundidad evita que
+  // GPU con menor precisión alternen entre una superficie y la otra (z-fighting).
+  const bandMaterial = new THREE.MeshBasicMaterial({
+    color: PISTE_EDGE_COLOR, side: THREE.DoubleSide, fog: false, toneMapped: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
   const rampBand = (o, t, depth = 0.18) => {
     const halfWidth = PARAMS.rampHalfWidth - 0.18;
     const centerS = o.s - PARAMS.rampLength + t * PARAMS.rampLength;
@@ -1807,7 +1818,8 @@ function makeRamps(track) {
       const s = centerS + ds;
       const rampT = Math.max(0, Math.min(1, (s - (o.s - PARAMS.rampLength)) / PARAMS.rampLength));
       for (const lat of [o.lat - halfWidth, o.lat + halfWidth]) {
-        const p = track.toWorld(s, lat, PARAMS.rampHeight * rampT + 0.025);
+        const lift = LOW_END ? 0.10 : 0.06;
+        const p = track.toWorld(s, lat, PARAMS.rampHeight * rampT + lift);
         vertices.push(p.x, p.y, p.z);
       }
     }
@@ -1831,7 +1843,7 @@ function makeRamps(track) {
     mesh.receiveShadow = true;
     group.add(mesh);
     for (const [index, t] of [0.18, 0.48, 0.78, 0.97].entries()) {
-      group.add(rampBand(o, t, index === 3 ? 0.32 : 0.14));
+      group.add(rampBand(o, t, index === 3 ? 0.38 : (LOW_END ? 0.24 : 0.16)));
     }
     const approachS = o.s - PARAMS.rampLength - 1.2;
     const approach = new THREE.Group();
@@ -1842,8 +1854,9 @@ function makeRamps(track) {
       marker.castShadow = true;
       approach.add(marker);
       const flagShape = new THREE.Shape();
-      flagShape.moveTo(0, 0); flagShape.lineTo(side * 0.82, -0.22); flagShape.lineTo(0, -0.55);
-      const flag = new THREE.Mesh(new THREE.ShapeGeometry(flagShape), flagMaterials[side > 0 ? 0 : 1]);
+      const flagScale = LOW_END ? 1.28 : 1;
+      flagShape.moveTo(0, 0); flagShape.lineTo(side * 0.82 * flagScale, -0.22 * flagScale); flagShape.lineTo(0, -0.55 * flagScale);
+      const flag = new THREE.Mesh(new THREE.ShapeGeometry(flagShape), flagMaterial);
       flag.position.set(x, 2.05, 0.02);
       approach.add(flag);
     }

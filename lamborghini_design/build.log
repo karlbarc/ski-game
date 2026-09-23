@@ -1,0 +1,11 @@
+/Users/carlosbarcelo/projects/ski-game/lamborghini_design/create_model.py:11: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  m=bpy.data.materials.new(n); m.diffuse_color=(*c,1); m.use_nodes=True
+/Users/carlosbarcelo/projects/ski-game/lamborghini_design/create_model.py:180: DeprecationWarning: 'World.use_nodes' is expected to be removed in Blender 6.0
+  world=scene.world;world.use_nodes=True;world.node_tree.nodes.get('Background').inputs[0].default_value=(.25,.30,.4,1);world.node_tree.nodes.get('Background').inputs[1].default_value=.4
+01:02.145  render           | Saved: '/Users/carlosbarcelo/projects/ski-game/lamborghini_design/lamborghini_preview.png'
+Add-on not loaded: "space_view3d_align_tools", cause: No module named 'space_view3d_align_tools'
+Info: Saved as "lamborghini.blend"
+MODEL_AND_RENDER_COMPLETE
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:49:19)
+
+Blender quit

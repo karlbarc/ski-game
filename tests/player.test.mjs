@@ -27,6 +27,38 @@ test('steering changes heading and drifts laterally', () => {
   assert.ok(st.lat > 0.1, `lat=${st.lat}`);
 });
 
+test('steering turns faster at higher speeds in both directions', () => {
+  const straightTrack = {
+    width: 100, obstacles: [],
+    frameAt: () => ({ tan: { y: -0.2 }, curvature: 0 }),
+  };
+  for (const steer of [-1, 1]) {
+    const headings = [0, 3, 15, 30, PARAMS.maxSpeed].map((speed) => {
+      const st = stepPlayer({ ...createPlayerState(), speed }, steer, 1 / 60, straightTrack);
+      assert.equal(st.fallen, false);
+      return st.heading * steer;
+    });
+    assert.equal(Math.abs(headings[0]), 0, 'stationary skis should not carve a turn');
+    for (let i = 1; i < headings.length; i++) {
+      assert.ok(headings[i] > headings[i - 1], 'turn response must increase with speed');
+    }
+    assert.ok(Math.abs(headings[3] - 2 * headings[2]) < 1e-12, 'twice the speed gives twice the turn rate');
+  }
+});
+
+test('fast steering still respects the heading limit', () => {
+  const straightTrack = {
+    width: 100, obstacles: [],
+    frameAt: () => ({ tan: { y: -0.2 }, curvature: 0 }),
+  };
+  for (const steer of [-1, 1]) {
+    const st = stepPlayer({
+      ...createPlayerState(), speed: PARAMS.maxSpeed, heading: steer * (PARAMS.maxHeading - 0.01),
+    }, steer, 1 / 60, straightTrack);
+    assert.equal(st.heading, steer * PARAMS.maxHeading);
+  }
+});
+
 test('pointing straight downhill gives a tuck acceleration bonus', () => {
   const noTuck = { ...PARAMS, tuckAccel: 0 };
   const withTuck = run({ ...createPlayerState(), speed: 5 }, 0, 2);

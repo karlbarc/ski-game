@@ -3,7 +3,8 @@ export const PARAMS = {
   friction: 0.25,      // rozamiento base de la nieve (m/s²)
   drag: 0.0035,        // resistencia del aire (·v²)
   carveBrake: 2.5,     // frenada extra por carving (·|sin(heading)|)
-  turnRate: 1.0,       // rad/s con steer a tope
+  turnRate: 1.0,       // rad/s con steer a tope a turnReferenceSpeed
+  turnReferenceSpeed: 15, // m/s: el giro crece proporcionalmente a la velocidad
   maxHeading: 1.1,     // rad
   jumpLaunchFactor: 0.12,
   minJumpVy: 2.0,
@@ -65,6 +66,10 @@ function fall(st, track, params, obstacle) {
   st.lat = findClearLat(track, st.s, preferred);
 }
 
+export function turnRateAtSpeed(speed, params = PARAMS) {
+  return params.turnRate * Math.max(0, Math.min(params.maxSpeed, speed)) / params.turnReferenceSpeed;
+}
+
 export function stepPlayer(state, steer, dt, track, params = PARAMS) {
   const st = { ...state };
   if (st.fallen) return st; // en el suelo hasta que recoverPlayer lo levante
@@ -72,7 +77,7 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS) {
   const frame = track.frameAt(st.s);
 
   if (!st.airborne) {
-    st.heading += steer * params.turnRate * dt;
+    st.heading += steer * turnRateAtSpeed(st.speed, params) * dt;
     st.heading = Math.max(-params.maxHeading, Math.min(params.maxHeading, st.heading));
     const slope = -frame.tan.y; // seno de la pendiente, positivo cuesta abajo
     const carveBrake = st.speed > params.crawlSpeed
