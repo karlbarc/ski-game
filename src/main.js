@@ -13,6 +13,7 @@ import { createControls } from './controls.js?v=1784480748';
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
+import { authenticatedPlayerName } from './player-profile.js';
 import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
 import { landingStrength, landingMotion } from './landing.js';
@@ -175,6 +176,26 @@ let racePlayerId = null;
 const googleButton = document.getElementById('btn-google');
 const signoutButton = document.getElementById('btn-signout');
 const authError = document.getElementById('auth-error');
+const mobileControls = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let authAutoAdvanceDone = false;
+
+function continueWithName(name) {
+  sessionName = name;
+  savePlayerName(name);
+  nameInput.value = name;
+  nameInput.removeAttribute('aria-invalid');
+  document.getElementById('name-error').textContent = '';
+  nameInput.blur();
+  if (!mobileControls) {
+    chooseControl('touch');
+    return;
+  }
+  document.getElementById('player-form').hidden = true;
+  document.getElementById('control-panel').hidden = false;
+  document.getElementById('btn-touch').focus();
+}
+
 auth.subscribe((user) => {
   googleButton.hidden = !!user;
   signoutButton.hidden = !user;
@@ -183,6 +204,11 @@ auth.subscribe((user) => {
     : 'Juega como invitado o inicia sesión con Google para publicar tus marcas.';
   document.getElementById('guest-warning').hidden = !!user;
   document.getElementById('btn-continue').textContent = user ? 'Continuar →' : 'Jugar como invitado →';
+  const startVisible = document.getElementById('start-screen').classList.contains('visible');
+  if (user && !authAutoAdvanceDone && !sessionName && startVisible) {
+    authAutoAdvanceDone = true;
+    continueWithName(authenticatedPlayerName(user, nameInput.value));
+  }
 });
 auth.initialize().catch(() => {
   authError.textContent = 'No se pudo recuperar la sesión. Puedes volver a entrar con Google o jugar como invitado.';
@@ -202,8 +228,6 @@ signoutButton.addEventListener('click', async () => {
   catch (error) { authError.textContent = error.message; }
   finally { signoutButton.disabled = false; }
 });
-const mobileControls = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
-  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 document.getElementById('btn-back-controls').textContent = mobileControls ? '‹ Nombre y controles' : '‹ Cambiar nombre';
 function showNameForm() {
   document.getElementById('player-form').hidden = false;
@@ -219,19 +243,7 @@ document.getElementById('player-form').addEventListener('submit', (event) => {
     nameInput.focus();
     return;
   }
-  sessionName = name;
-  savePlayerName(name);
-  nameInput.value = name;
-  nameInput.removeAttribute('aria-invalid');
-  document.getElementById('name-error').textContent = '';
-  nameInput.blur();
-  if (!mobileControls) {
-    chooseControl('touch');
-    return;
-  }
-  document.getElementById('player-form').hidden = true;
-  document.getElementById('control-panel').hidden = false;
-  document.getElementById('btn-touch').focus();
+  continueWithName(name);
 });
 document.getElementById('btn-edit-name').addEventListener('click', showNameForm);
 

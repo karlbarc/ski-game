@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAuthController } from '../src/auth-controller.js';
 import { createRankingApi } from '../src/ranking-api.js';
+import { authenticatedPlayerName } from '../src/player-profile.js';
 
 function setup(href = 'https://game.example/?track=azul') {
   const state = { session: null, urls: [], exchanges: [] };
@@ -63,6 +64,17 @@ test('sign-out clears this device, while failed sign-out preserves state', async
   await controller.signOut();
   assert.equal(controller.user(), null);
   assert.equal(state.signout.scope, 'local');
+});
+
+test('authenticated players keep their chosen nickname', () => {
+  const user = { email: 'snow@example.com', user_metadata: { given_name: 'Google Name' } };
+  assert.equal(authenticatedPlayerName(user, '  Powder  '), 'Powder');
+});
+
+test('a first Google login derives a short nickname from the profile', () => {
+  const user = { email: 'snow@example.com', user_metadata: { given_name: 'Montañista Andino' } };
+  assert.equal(authenticatedPlayerName(user), 'Montañista A');
+  assert.equal(authenticatedPlayerName({ email: 'skier@example.com', user_metadata: {} }), 'skier');
 });
 
 const score = { track: 'Verde', name: 'Snow', timeSec: 65, speedKmh: 85, expectedPlayerId: 'account-a' };
