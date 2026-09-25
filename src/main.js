@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { splitStaticInstances } from './render-batches.js';
 import { buildTrack, mulberry32 } from './track.js?v=1784480748';
 import { TRACKS, CATEGORIES, categoryTracks, trackProgress } from './track-catalog.js';
 import { createPlayerState, stepPlayer, recoverPlayer, turnRateAtSpeed, playerViewHeading, PARAMS } from './player.js?v=1784480748';
@@ -1541,7 +1542,7 @@ function buildTreeInstances(track, positions, species) {
   foliage.receiveShadow = true;
   trunk.castShadow = true;
   trunk.receiveShadow = true;
-  return [foliage, trunk];
+  return [...splitStaticInstances(foliage), ...splitStaticInstances(trunk)];
 }
 
 function makeTrees(track) {
