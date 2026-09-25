@@ -335,7 +335,7 @@ async function showRanking() {
   document.getElementById('rank-screen').classList.add('visible');
   title.textContent = 'Elige una pista';
   subtitle.textContent = 'Consulta las marcas globales y tu posición con tu cuenta de Google.';
-  back.textContent = '‹ Volver a las pistas';
+  back.textContent = '‹ Volver';
   list.className = 'rank-selector';
 
   const rankedTracks = Object.entries(TRACKS)

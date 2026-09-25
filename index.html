@@ -233,7 +233,8 @@
   #pause-screen #btn-resume { grid-column: 1 / -1; background: #b8efdc; border-color: #d5faed; color: #102c32; font-size: 1.05rem; }
   #pause-screen #btn-menu-pause { background: rgba(81, 126, 156, .38); }
   #rank-screen { background: linear-gradient(145deg, rgba(7,24,40,.94), rgba(17,51,73,.88)); }
-  .rank-header { width: min(100%, 1080px); text-align: left; }
+  .rank-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; width: min(100%, 1080px); text-align: left; }
+  .rank-header-copy { min-width: 0; }
   .rank-header h1 { margin: 7px 0; }
   #rank-subtitle { color: #b9d1df; }
   #rank-list { width: min(100%, 1080px); }
@@ -274,7 +275,7 @@
   .rank-empty-icon { display: block; margin-bottom: 13px; font-size: 2.3rem; }
   .rank-empty-state h2 { margin-bottom: 8px; font-size: 1.25rem; }
   .rank-empty-state p { color: #b9d1df; }
-  #btn-back-tracks { align-self: center; background: transparent; box-shadow: none; font-size: .9rem; color: #c5dce8; padding: 10px 14px; }
+  #btn-back-tracks { flex: 0 0 auto; background: rgba(8, 30, 46, .48); box-shadow: none; font-size: .9rem; color: #c5dce8; padding: 10px 14px; white-space: nowrap; }
   #btn-ranking { font-size: 1.35rem !important; padding: 10px 24px !important; }
   /* Menús adaptables: el contenido crece dentro de cada pantalla. */
   canvas { touch-action: none; }
@@ -336,6 +337,7 @@
   .rank-row span:first-child { overflow-wrap: anywhere; text-align: left; }
   .rank-row span:last-child { white-space: nowrap; }
   @media (max-width: 540px) {
+    .rank-header { gap: 10px; }
     .menu-header { align-items: stretch; flex-direction: column; gap: 14px; }
     .menu-actions { justify-content: stretch; }
     #track-screen .menu-actions button { flex: 1 1 0; }
@@ -494,12 +496,14 @@
 </div>
 <div id="rank-screen" class="overlay">
   <header class="rank-header">
-    <span class="eyebrow">COMPITE CONTRA LA MONTAÑA</span>
-    <h1 id="rank-title">Elige una pista</h1>
-    <p id="rank-subtitle">Consulta el ranking de las pistas donde ya tienes una marca.</p>
+    <div class="rank-header-copy">
+      <span class="eyebrow">COMPITE CONTRA LA MONTAÑA</span>
+      <h1 id="rank-title">Elige una pista</h1>
+      <p id="rank-subtitle">Consulta el ranking de las pistas donde ya tienes una marca.</p>
+    </div>
+    <button id="btn-back-tracks">‹ Volver</button>
   </header>
   <div id="rank-list"></div>
-  <button id="btn-back-tracks">‹ Volver</button>
 </div>
 <div id="finish-screen" class="overlay">
   <section class="finish-panel" aria-labelledby="finish-title">
