@@ -30,7 +30,7 @@ const LOW_END = qualityParam
 
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: !LOW_END });
+  renderer = new THREE.WebGLRenderer({ antialias: true });
 } catch (e) {
   document.getElementById('error-screen').classList.add('visible');
   throw e;
@@ -46,7 +46,7 @@ function visibleViewportSize() {
   };
 }
 let { width: viewportWidth, height: viewportHeight } = visibleViewportSize();
-// En móvil y navegadores integrados, reducimos píxeles, antialiasing y sombras
+// En móvil y navegadores integrados, reducimos píxeles y sombras
 // antes que arriesgar el framerate. `?quality=alta|baja` permite comparar.
 
 renderer.setPixelRatio(Math.min(devicePixelRatio, LOW_END ? 1 : 2));
