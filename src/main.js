@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildTrack, mulberry32 } from './track.js?v=1784480748';
 import { TRACKS, CATEGORIES, categoryTracks, trackProgress } from './track-catalog.js';
-import { createPlayerState, stepPlayer, recoverPlayer, turnRateAtSpeed, PARAMS } from './player.js?v=1784480748';
+import { createPlayerState, stepPlayer, recoverPlayer, turnRateAtSpeed, playerViewHeading, PARAMS } from './player.js?v=1784480748';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
@@ -472,7 +472,9 @@ function buildTrackMenu() {
     card.style.setProperty('--accent', data.accent);
     card.innerHTML = `
       <span class="track-top"><span class="track-emoji">${data.emoji}</span><span class="track-level">Nivel ${data.difficultyLevel} · ${data.difficulty}</span></span>
-      <svg class="track-preview" viewBox="0 0 240 72" aria-hidden="true"><path d="M0 72 52 14 85 48 136 0 204 72Z" fill="#ffffff09"/><path d="m92 72 75-49 73 49Z" fill="#ffffff08"/><path d="M125 6 C80 18 155 26 113 39 S65 57 120 67" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/><circle cx="125" cy="6" r="4" fill="#fff"/><circle cx="120" cy="67" r="4" fill="#fff"/></svg>
+      <span class="track-art" aria-hidden="true"><svg class="track-preview" viewBox="0 0 240 72" aria-hidden="true"><path d="M0 72 52 14 85 48 136 0 204 72Z" fill="#ffffff09"/><path d="m92 72 75-49 73 49Z" fill="#ffffff08"/><path d="M125 6 C80 18 155 26 113 39 S65 57 120 67" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/><circle cx="125" cy="6" r="4" fill="#fff"/><circle cx="120" cy="67" r="4" fill="#fff"/></svg>
+        ${progress.unlocked ? '' : '<span class="track-lock"><svg viewBox="0 0 48 48" fill="none"><path d="M14 21v-7a10 10 0 0 1 20 0v7" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><rect x="8" y="20" width="32" height="25" rx="6" fill="currentColor"/><circle cx="24" cy="31" r="3" fill="#17212b"/><path d="M24 32v5" stroke="#17212b" stroke-width="3" stroke-linecap="round"/></svg></span>'}
+      </span>
       <span class="track-title">${data.name}</span>
       <span class="track-description${data.description ? '' : ' track-description-spacer'}">${data.description || ''}</span>
       <span class="track-stats">${m.length} m · ${m.slope}% pendiente<br>${m.obstacles} obstáculos · ${m.jumps} saltos</span>
@@ -632,7 +634,7 @@ async function sendScore(name, timeSec, speedKmh, resultToken) {
     await submitScore({ track: track.data.name, name, timeSec, speedKmh, expectedPlayerId: racePlayerId });
     const mine = await fetchMyRank(track.data.name);
     if (resultToken !== finishResultToken) return;
-    status.textContent = `🏆 Marca publicada como ${name}`;
+    status.textContent = '';
     rankStatus.textContent = mine
       ? `Quedaste en el puesto #${mine.rank} del ranking de ${track.data.name}.`
       : 'Tu marca se publicó, pero no pudimos calcular la posición.';
@@ -676,11 +678,12 @@ function updateCamera(visualDt) {
   const surfaceHeight = snowRelief(player.s, player.lat, track.width);
   const pos = track.toWorld(player.s, player.lat, surfaceHeight + player.height + eye - landing.dip);
   camera.position.copy(pos);
-  const dir = f.tan.clone().multiplyScalar(Math.cos(player.heading))
-    .addScaledVector(f.side, Math.sin(player.heading));
+  const viewHeading = playerViewHeading(player);
+  const dir = f.tan.clone().multiplyScalar(Math.cos(viewHeading))
+    .addScaledVector(f.side, Math.sin(viewHeading));
   camera.lookAt(pos.clone().add(dir));
   if (!player.fallen) camera.rotateX((player.airborne ? -0.045 : -0.12) - landing.pitch);
-  camera.rotateZ(player.fallen ? 0.5 : steerSmooth * 0.16);
+  camera.rotateZ(player.fallen ? 0.5 : player.brakeReturnHeading != null ? 0 : steerSmooth * 0.16);
   const fov = Math.min(98, 70 + player.speed * 0.9 + (player.airborne ? 4 : 0));
   if (Math.abs(fov - camera.fov) > 0.1) {
     camera.fov = fov;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from '../src/player.js';
+import { createPlayerState, stepPlayer, recoverPlayer, playerViewHeading, PARAMS } from '../src/player.js';
 import { buildTrack } from '../src/track.js';
 import { verde } from '../src/tracks/verde.js';
 import { azul } from '../src/tracks/azul.js';
@@ -42,7 +42,7 @@ test('releasing the brake smoothly restores the previous direction, even from a 
     assert.ok(Math.abs(st.heading - originalHeading) < Math.abs(brakedHeading - originalHeading));
     assert.ok(Math.abs(st.heading - brakedHeading) < Math.abs(originalHeading - brakedHeading), 'return is interpolated');
     // Holding the direction key after releasing Shift must still allow the return.
-    for (let i = 0; i < 14 && st.brakeReturnHeading != null; i++) {
+    for (let i = 0; i < 34 && st.brakeReturnHeading != null; i++) {
       st = stepPlayer(st, side, 1 / 60, piste);
     }
     assert.equal(st.brakeReturnHeading, null);
@@ -55,20 +55,49 @@ test('releasing the brake smoothly restores the previous direction, even from a 
   }
 });
 
-test('braking near either piste edge does not redirect momentum sideways', () => {
+test('braking near either piste edge adds only a small drift toward the braking side', () => {
   const piste = { width: 10, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
   for (const side of [-1, 1]) {
     let st = { ...createPlayerState(), lat: side * 4.5, speed: PARAMS.maxSpeed };
     for (let i = 0; i < 30; i++) st = stepPlayer(st, side, 1 / 60, piste, PARAMS, 1);
     assert.ok(Math.abs(st.heading) > 1, 'skis turn across the slope to brake');
-    assert.equal(st.lat, side * 4.5, 'momentum stays along the original direction');
+    assert.ok(st.lat * side > 4.5, 'drifts toward the braking side');
+    assert.ok(st.lat * side <= 5 - PARAMS.brakeDriftEdgeMargin + 1e-10);
     assert.equal(st.fallen, false);
-    for (let i = 0; i < 15; i++) st = stepPlayer(st, 0, 1 / 60, piste);
-    assert.equal(st.brakeReturnHeading, null, 'returns within a quarter second');
+    for (let i = 0; i < 34; i++) st = stepPlayer(st, 0, 1 / 60, piste);
+    assert.equal(st.brakeReturnHeading, null, 'returns within about half a second');
     assert.equal(st.heading, 0);
-    assert.equal(st.lat, side * 4.5);
+    assert.ok(st.lat * side <= 5 - PARAMS.brakeDriftEdgeMargin + 1e-10);
     assert.equal(st.fallen, false);
+    const returnedLat = st.lat;
+    for (let i = 0; i < 60; i++) st = stepPlayer(st, 0, 1 / 60, piste);
+    assert.equal(st.lat, returnedLat, 'drift ends when the skis return');
   }
+});
+
+test('braking produces a clearly visible lateral skid on open piste', () => {
+  const piste = { width: 100, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
+  for (const side of [-1, 1]) {
+    let st = { ...createPlayerState(), speed: PARAMS.maxSpeed };
+    for (let i = 0; i < 30; i++) st = stepPlayer(st, side, 1 / 60, piste, PARAMS, 1);
+    for (let i = 0; i < 34; i++) st = stepPlayer(st, 0, 1 / 60, piste);
+    assert.ok(st.lat * side > 0.5, `skid=${st.lat}`);
+    assert.ok(st.lat * side <= PARAMS.brakeDriftLimit + 1e-10);
+  }
+});
+
+test('braking turns the skis while the skier view keeps its original direction', () => {
+  const piste = { width: 100, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
+  const originalHeading = 0.25;
+  let st = { ...createPlayerState(), speed: 30, heading: originalHeading };
+  for (let i = 0; i < 20; i++) st = stepPlayer(st, 1, 1 / 60, piste, PARAMS, 1);
+  assert.ok(st.heading > originalHeading + 0.5, 'skis visibly cross the slope');
+  assert.equal(playerViewHeading(st), originalHeading, 'view remains on the approach direction');
+  for (let i = 0; i < 34; i++) {
+    st = stepPlayer(st, 0, 1 / 60, piste);
+    assert.ok(Math.abs(playerViewHeading(st) - originalHeading) < 1e-10);
+  }
+  assert.equal(st.heading, originalHeading);
 });
 
 test('the saved braking direction follows the track reference frame and clears on a fall', () => {
