@@ -8,7 +8,8 @@ export const PARAMS = {
   maxHeading: 1.1,     // rad
   brakeHeading: 1.45, // esquís casi atravesados respecto a la pendiente
   brakeTurnMultiplier: 3.5,
-  brakeDecel: 24,     // m/s²: derrape fuerte con los cantos sobre la nieve
+  brakeDecel: 24,     // m/s²: frenada base con los cantos sobre la nieve
+  brakeSpeedGain: 0.8, // m/s² extra por cada m/s de velocidad
   jumpLaunchFactor: 0.12,
   minJumpVy: 2.0,
   rampLength: 6,       // la rampa sube desde o.s - rampLength hasta el labio en o.s
@@ -95,7 +96,7 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS, brake = 0) 
       - params.friction
       - params.drag * st.speed * st.speed
       - carveBrake
-      - brake * params.brakeDecel;
+      - brake * (params.brakeDecel + params.brakeSpeedGain * st.speed);
     st.speed = Math.max(0, Math.min(params.maxSpeed, st.speed + accel * dt));
   } else {
     st.height += st.vy * dt;

@@ -29,6 +29,23 @@ test('hard braking crosses the skis, sheds most speed, and allows recovery after
   }
 });
 
+test('the same brake input sheds more speed at higher speeds', () => {
+  const piste = { width: 200, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
+  const dt = 1 / 60;
+  for (const brake of [0.5, 1]) {
+    let previousDecel = 0;
+    for (const speed of [5, 15, 30, PARAMS.maxSpeed]) {
+      // Same heading and no tuck: isolate active braking from air drag and gravity.
+      const start = { ...createPlayerState(), speed, heading: 0.8 };
+      const coasting = stepPlayer(start, 0, dt, piste);
+      const braking = stepPlayer(start, 0, dt, piste, PARAMS, brake);
+      const brakeDecel = (coasting.speed - braking.speed) / dt;
+      assert.ok(brakeDecel > previousDecel, `brake=${brake}, speed=${speed}`);
+      previousDecel = brakeDecel;
+    }
+  }
+});
+
 test('braking cannot slow or turn the skier in midair', () => {
   const start = { ...createPlayerState(), speed: 20, airborne: true, height: 3, vy: 2 };
   assert.deepEqual(stepPlayer(start, 1, 1 / 60, track, PARAMS, 1),
