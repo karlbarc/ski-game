@@ -47,9 +47,9 @@ export function createControls(target = window) {
     if (state.mode === 'swipe') {
       const elapsed = e.timeStamp - gesture.lastTime;
       const speed = elapsed > 0 ? Math.abs(touch.clientX - gesture.lastX) / elapsed : 0;
-      // 90 px completan el giro; a partir de 0,9 px/ms empieza la frenada.
-      state.touch = Math.max(-1, Math.min(1, -(touch.clientX - gesture.startX) / 90));
-      state.brake = Math.max(0, Math.min(1, (speed - 0.9) / 0.9));
+      // 60 px completan el giro; a partir de 0,6 px/ms empieza la frenada.
+      state.touch = Math.max(-1, Math.min(1, -(touch.clientX - gesture.startX) / 60));
+      state.brake = Math.max(0, Math.min(1, (speed - 0.6) / 0.6));
       gesture.lastX = touch.clientX;
       gesture.lastTime = e.timeStamp;
       return;

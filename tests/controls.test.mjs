@@ -104,10 +104,10 @@ test('horizontal swipe steers by distance and a fast movement brakes', async () 
     });
 
     emit('touchstart', 200, 0);
-    emit('touchmove', 245, 100);
+    emit('touchmove', 230, 100);
     assert.equal(controls.steer(), -0.5);
     assert.equal(controls.brake(), 0, 'a measured slide only steers');
-    emit('touchmove', 155, 140);
+    emit('touchmove', 170, 140);
     assert.equal(controls.steer(), 0.5);
     assert.equal(controls.brake(), 1, 'a very fast slide fully brakes');
     emit('touchend', null, 150);
