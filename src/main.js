@@ -180,6 +180,7 @@ auth.subscribe((user) => {
   document.getElementById('auth-status').textContent = user
     ? `Sesión iniciada: ${user.email || 'cuenta de Google'}. Tu apodo es público; tu correo no.`
     : 'Juega como invitado o inicia sesión con Google para publicar tus marcas.';
+  document.getElementById('guest-warning').hidden = !!user;
   document.getElementById('btn-continue').textContent = user ? 'Continuar →' : 'Jugar como invitado →';
 });
 auth.initialize().catch(() => {

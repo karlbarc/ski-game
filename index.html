@@ -296,6 +296,7 @@
   .auth-panel { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid #64879b; margin-bottom: 6px; }
   #btn-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; border-radius: 12px; font: 600 16px system-ui, sans-serif; padding: 14px 18px; }
   #auth-status { overflow-wrap: anywhere; font-size: .85rem; color: #bbcedb; }
+  #guest-warning { padding: 10px 12px !important; border: 1px solid #ffd16666; border-radius: 10px; background: #ffd16614 !important; color: #ffe7a3; font-size: .88rem; font-weight: 700; line-height: 1.4; }
   #auth-error { color: #ffcf9e; font-size: .85rem; }
   #auth-error:empty { display: none; }
   button:disabled { opacity: .6; cursor: wait; }
@@ -417,6 +418,7 @@
     <div class="auth-panel">
       <button id="btn-google" type="button" disabled>Continuar con Google</button>
       <p id="auth-status" role="status">Comprobando sesión…</p>
+      <p id="guest-warning">⚠️ Si juegas como invitado, tus puntajes se guardarán solo en este dispositivo y no se publicarán en el ranking global.</p>
       <button id="btn-signout" type="button" class="text-button" hidden>Cerrar sesión</button>
       <p id="auth-error" role="alert"></p>
     </div>
