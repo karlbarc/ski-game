@@ -2,6 +2,8 @@
 export const verde = {
   name: 'Verde',
   emoji: '🟢',
+  category: 'obstaculos',
+  difficultyLevel: 1,
   difficulty: 'Fácil',
   accent: '#3fae62',
   width: 16,

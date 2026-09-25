@@ -3,9 +3,16 @@
 Juego de ski en primera persona para navegador (móvil y escritorio).
 Baja la pista en el menor tiempo posible sin caerte.
 
-Cuatro pistas, seleccionables en el menú de inicio:
+Elige una categoría y recorre sus pistas en un carrusel horizontal, ordenado por
+`difficultyLevel`. En **Obstáculos**, completar Verde desbloquea Azul y completar
+Azul desbloquea Roja; completar Roja desbloquea Negra. **Recreativas** empieza con Alpina disponible. Las marcas
+guardadas en este navegador cuentan como pistas completadas; las bajadas de
+prueba con autopilot o velocidad alterada no desbloquean pistas.
+
+Cinco pistas:
 - **Verde** (fácil)
 - **Azul** (media: más angosta, curvas cerradas y más obstáculos)
+- **Roja** (avanzada: 11 m de ancho, eses encadenadas, pendiente intermedia y 3 saltos)
 - **Negra** (difícil: 9 m de ancho, más empinada, obstáculos en el centro y 4 saltos)
 - **Alpina** (media: descenso largo de pendiente variable, palas, travesía y eses amplias; 18 m de ancho, rocas y 3 saltos opcionales)
 
@@ -49,7 +56,7 @@ URLs de retorno en Supabase. No se necesitan secretos en Vercel.
 ## Pruebas
 
 - `npm test` — tests unitarios (física, pista, cronómetro) con `node --test`.
-- Las pistas son datos: añade un archivo en `src/tracks/` con puntos de control y obstáculos.
+- Las pistas son datos: añade un archivo en `src/tracks/` con puntos de control, obstáculos, `category` y `difficultyLevel`, y regístralo en `src/track-catalog.js`. Las nuevas categorías se declaran en `CATEGORIES`; el orden y el requisito anterior se calculan automáticamente.
 
 ## Verificación e2e
 

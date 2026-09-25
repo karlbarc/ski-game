@@ -3,6 +3,8 @@
 export const alpina = {
   name: 'Alpina',
   emoji: '🏔️',
+  category: 'recreativas',
+  difficultyLevel: 2,
   difficulty: 'Media · terreno variado',
   accent: '#29a6a0',
   description: 'Pendientes variadas, curvas amplias, rocas y tres saltos.',

@@ -3,6 +3,8 @@
 export const azul = {
   name: 'Azul',
   emoji: '🔵',
+  category: 'obstaculos',
+  difficultyLevel: 2,
   difficulty: 'Media',
   accent: '#2f80d0',
   width: 13,

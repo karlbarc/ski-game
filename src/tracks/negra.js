@@ -3,6 +3,8 @@
 export const negra = {
   name: 'Negra',
   emoji: '⚫',
+  category: 'obstaculos',
+  difficultyLevel: 4,
   difficulty: 'Difícil',
   accent: '#8a94a3',
   width: 9,

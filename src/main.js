@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 import { buildTrack, mulberry32 } from './track.js?v=1784480748';
-import { verde } from './tracks/verde.js?v=1784480748';
-import { azul } from './tracks/azul.js?v=1784480748';
-import { negra } from './tracks/negra.js?v=1784480748';
-import { alpina } from './tracks/alpina.js?v=1784480748';
+import { TRACKS, CATEGORIES, categoryTracks, trackProgress } from './track-catalog.js';
 import { createPlayerState, stepPlayer, recoverPlayer, turnRateAtSpeed, PARAMS } from './player.js?v=1784480748';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
@@ -105,7 +102,6 @@ const skiContactShadows = makeSkiContactShadows();
 scene.add(skiContactShadows);
 scene.add(camera);
 
-const TRACKS = { verde, azul, negra, alpina };
 const PISTE_EDGE_COLOR = 0x50bced;
 const JUMP_FLAG_COLOR = 0xe6534d;
 const pisteSnow = makeSnowSurface(true);
@@ -423,6 +419,7 @@ document.getElementById('btn-back-tracks').addEventListener('click', () => {
 document.getElementById('btn-menu-pause').addEventListener('click', goToMenu);
 
 let selectedTrack = TRACKS[query.get('track')] ? query.get('track') : 'verde';
+let selectedCategory = null;
 
 // Metadatos por pista para las tarjetas del menú (calculados una vez).
 const TRACK_INFO = {};
@@ -444,26 +441,74 @@ function trackMeta(key) {
 function buildTrackMenu() {
   const list = document.getElementById('track-list');
   list.innerHTML = '';
-  document.getElementById('player-greeting').textContent = `${sessionName}, elige una pista para empezar.${mobileControls ? '' : ' Gira con las flechas ← → · Pausa con Esc.'}`;
-  for (const [key, data] of Object.entries(TRACKS)) {
+  document.getElementById('player-greeting').textContent = `${sessionName}, elige la categoría que quieres jugar.`;
+  const categories = document.getElementById('category-list');
+  categories.innerHTML = '';
+  for (const category of CATEGORIES) {
+    const button = document.createElement('button');
+    button.className = 'category-choice';
+    button.setAttribute('aria-pressed', String(selectedCategory === category.id));
+    const count = categoryTracks(category.id).length;
+    button.innerHTML = `<span>${category.emoji} ${category.name}</span><small>${category.description}</small><small>${count} ${count === 1 ? 'pista' : 'pistas'}</small>`;
+    button.addEventListener('click', () => {
+      selectedCategory = category.id;
+      buildTrackMenu();
+      document.querySelectorAll('.category-choice')[CATEGORIES.indexOf(category)].focus({ preventScroll: true });
+    });
+    categories.appendChild(button);
+  }
+  document.getElementById('track-carousel').hidden = !selectedCategory;
+  if (!selectedCategory) return;
+  const category = CATEGORIES.find((item) => item.id === selectedCategory);
+  document.getElementById('category-title').textContent = category.name;
+  for (const [key, data] of categoryTracks(selectedCategory)) {
     const m = trackMeta(key);
     const best = loadBest(localStorage, data.name);
     const card = document.createElement('button');
-    card.className = 'track-card';
+    const progress = trackProgress(localStorage, key);
+    card.className = `track-card${progress.unlocked ? '' : ' locked'}`;
+    card.setAttribute('aria-disabled', String(!progress.unlocked));
     card.dataset.track = key;
     card.style.setProperty('--accent', data.accent);
     card.innerHTML = `
-      <span class="track-top"><span class="track-emoji">${data.emoji}</span><span class="track-level">${data.difficulty}</span></span>
+      <span class="track-top"><span class="track-emoji">${data.emoji}</span><span class="track-level">Nivel ${data.difficultyLevel} · ${data.difficulty}</span></span>
       <svg class="track-preview" viewBox="0 0 240 72" aria-hidden="true"><path d="M0 72 52 14 85 48 136 0 204 72Z" fill="#ffffff09"/><path d="m92 72 75-49 73 49Z" fill="#ffffff08"/><path d="M125 6 C80 18 155 26 113 39 S65 57 120 67" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/><circle cx="125" cy="6" r="4" fill="#fff"/><circle cx="120" cy="67" r="4" fill="#fff"/></svg>
       <span class="track-title">${data.name}</span>
       <span class="track-description${data.description ? '' : ' track-description-spacer'}">${data.description || ''}</span>
       <span class="track-stats">${m.length} m · ${m.slope}% pendiente<br>${m.obstacles} obstáculos · ${m.jumps} saltos</span>
       <span class="track-best"><small>Tu mejor tiempo</small><strong>${best == null ? 'Sin marca todavía' : formatTime(best)}</strong></span>
-      <span class="track-play"><span>Bajar esta pista</span><span class="track-play-arrow" aria-hidden="true">→</span></span>`;
+      <span class="track-status">${progress.unlocked ? (progress.completed ? '✓ Completada' : 'Disponible') : `🔒 Completa ${progress.previous.name} para desbloquear`}</span>
+      <span class="track-play"><span>${progress.unlocked ? 'Bajar esta pista' : 'Bloqueada'}</span><span class="track-play-arrow" aria-hidden="true">${progress.unlocked ? '→' : '🔒'}</span></span>`;
     card.addEventListener('click', () => startRun(key));
     list.appendChild(card);
   }
+  list.scrollLeft = 0;
+  requestAnimationFrame(updateCarouselControls);
 }
+
+function updateCarouselControls() {
+  const list = document.getElementById('track-list');
+  document.getElementById('btn-track-prev').disabled = list.scrollLeft <= 2;
+  document.getElementById('btn-track-next').disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 2;
+}
+const trackList = document.getElementById('track-list');
+trackList.addEventListener('scroll', updateCarouselControls, { passive: true });
+window.addEventListener('resize', updateCarouselControls);
+function moveCarousel(direction) {
+  const step = trackList.firstElementChild?.getBoundingClientRect().width || trackList.clientWidth;
+  trackList.scrollBy({ left: direction * (step + 16), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+}
+document.getElementById('btn-track-prev').addEventListener('click', () => moveCarousel(-1));
+document.getElementById('btn-track-next').addEventListener('click', () => moveCarousel(1));
+trackList.addEventListener('keydown', (event) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const cards = [...trackList.children];
+  const index = cards.indexOf(document.activeElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? cards.length - 1
+    : Math.max(0, Math.min(cards.length - 1, index + (event.key === 'ArrowRight' ? 1 : -1)));
+  cards[next]?.focus();
+});
 
 // Paso 1: elegir control (aquí se pide el permiso del giroscopio, dentro del gesto).
 function chooseControl(mode) {
@@ -476,11 +521,12 @@ function chooseControl(mode) {
   hud.hideStart();
   buildTrackMenu();
   document.getElementById('track-screen').classList.add('visible');
-  document.querySelector('.track-card')?.focus({ preventScroll: true });
+  document.querySelector('.category-choice')?.focus({ preventScroll: true });
 }
 
 // Paso 2: elegir pista y bajar.
 function startRun(key) {
+  if (!trackProgress(localStorage, key).unlocked) return;
   selectedTrack = key;
   document.getElementById('track-screen').classList.remove('visible');
   document.getElementById('hud').classList.remove('hidden');

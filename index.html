@@ -388,6 +388,34 @@
   .start-light.lit { background: #ff785e; box-shadow: 0 0 14px #ff785e70; }
   #race-start[data-cue="0"] { color: #b9ffe0; }
   #race-start[data-cue="0"] .start-light.lit { background: #77edb6; box-shadow: 0 0 14px #77edb670; }
+
+  #track-screen { touch-action: pan-x pan-y; }
+  #category-list { display: flex; flex-wrap: wrap; gap: 12px; width: min(100%, 1080px); }
+  .overlay .category-choice { flex: 1 1 240px; text-align: left; background: #102a3c; padding: 16px 20px; }
+  .category-choice > span { font-size: 1.1rem; }
+  .category-choice small { color: #b9d6e5; }
+  .overlay .category-choice[aria-pressed="true"] { border-color: #b8efdc; background: #20483f; }
+  #track-carousel { width: min(100%, 1080px); min-width: 0; text-align: left; }
+  .carousel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .carousel-heading h2 { font-size: 1.2rem; }
+  .carousel-heading p { font-size: .8rem; color: #b9d6e5; margin-top: 5px; }
+  .carousel-arrows { display: flex; gap: 8px; }
+  .overlay .carousel-arrows button { padding: 10px 16px; }
+  .carousel-arrows button:disabled { opacity: .35; cursor: default; }
+  #track-list { display: flex; flex-direction: row; gap: 16px; width: 100%; max-height: none; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding: 4px; padding: 6px 4px 18px; scrollbar-color: #8dbdbb #102a3c; touch-action: pan-x pan-y; }
+  .overlay .track-card { flex: 0 0 clamp(260px, 36vw, 380px); width: auto; scroll-snap-align: start; }
+  .track-status { font-size: .8rem; color: #b8efdc; min-height: 2.4em; }
+  .overlay .track-card.locked { border-top-color: #6f8797; background: linear-gradient(145deg, #243a49, #142b3a); cursor: not-allowed; }
+  .track-card.locked .track-preview { opacity: .35; }
+  .track-card.locked .track-status { color: #c5d6e0; }
+  .track-card.locked .track-play { background: #354b59; border-color: #637b8a; color: #d8e5ec; }
+  .track-card.locked:hover { transform: none; }
+  @media (max-width: 600px) {
+    .overlay .category-choice { flex-basis: 100%; padding: 12px 16px; }
+    .overlay .track-card { flex-basis: 82%; min-height: 350px; }
+    .track-level { max-width: none; }
+    .carousel-heading { align-items: flex-start; }
+  }
 </style>
 </head>
 <body>
@@ -443,7 +471,13 @@
     <div class="menu-header-copy"><span class="eyebrow">ELIGE TU PRÓXIMO DESAFÍO</span><h1>Explora la montaña</h1><p id="player-greeting"></p></div>
     <div class="menu-actions"><button id="btn-back-controls">‹ Cambiar nombre</button><button id="btn-ranking">🏆 Ranking</button></div>
   </header>
-  <div id="track-list"></div>
+  <div id="category-list" role="group" aria-label="Elige una categoría"></div>
+  <section id="track-carousel" aria-labelledby="category-title" aria-roledescription="carrusel" hidden>
+    <div class="carousel-heading"><div><h2 id="category-title"></h2><p>De menor a mayor dificultad · Completa una pista para abrir la siguiente.</p></div>
+      <div class="carousel-arrows"><button id="btn-track-prev" aria-label="Pista anterior" aria-controls="track-list">←</button><button id="btn-track-next" aria-label="Pista siguiente" aria-controls="track-list">→</button></div>
+    </div>
+    <div id="track-list" role="group" aria-label="Pistas por dificultad"></div>
+  </section>
 </div>
 <div id="rank-screen" class="overlay">
   <header class="rank-header">

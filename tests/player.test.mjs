@@ -4,6 +4,7 @@ import { createPlayerState, stepPlayer, recoverPlayer, PARAMS } from '../src/pla
 import { buildTrack } from '../src/track.js';
 import { verde } from '../src/tracks/verde.js';
 import { azul } from '../src/tracks/azul.js';
+import { roja } from '../src/tracks/roja.js';
 import { negra } from '../src/tracks/negra.js';
 
 const track = buildTrack(verde);
@@ -140,7 +141,7 @@ test('flying into a tree still crashes; flying over a rock is safe', () => {
 
 test('fall respawn is always clear and inside the piste, on every track', () => {
   const dt = 1 / 60;
-  for (const data of [verde, azul, negra]) {
+  for (const data of [verde, azul, roja, negra]) {
     const tr = buildTrack(data);
     for (const o of tr.obstacles) {
       if (o.type === 'jump') continue;
