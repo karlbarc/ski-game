@@ -12,12 +12,12 @@ import {
 import { createControls } from './controls.js?v=1784480748';
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784480748';
+import { auth } from './auth.js';
 import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
 import { landingStrength, landingMotion } from './landing.js';
 import { createSnowSound } from './audio.js?v=1789743651';
 
-const GAME_VERSION = new URL(import.meta.url).searchParams.get('v') || 'dev';
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
 const TIMESCALE = parseFloat(query.get('timescale') || '1');
@@ -152,36 +152,12 @@ let paused = false;
 let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
 let runMaxSpeed = 0; // velocidad máxima de la bajada actual (m/s)
 let crashSpeed = 0;  // velocidad en el momento de la caída (se muestra congelada)
-let runFrames = 0;   // frames de la bajada en curso (para FPS promedio)
 
 function bumpCounter(key) {
   const k = `ski-${key}-${track.data.name}`;
   const v = (parseInt(localStorage.getItem(k), 10) || 0) + 1;
   localStorage.setItem(k, String(v));
   return v;
-}
-function readCounter(key) {
-  return parseInt(localStorage.getItem(`ski-${key}-${track.data.name}`), 10) || 0;
-}
-
-// Contexto del dispositivo y de la partida que acompaña cada marca del ranking.
-function buildMeta() {
-  const elapsed = race.elapsed || 1;
-  return {
-    control: controls.mode(),
-    screen: `${screen.width}x${screen.height}`,
-    viewport: `${innerWidth}x${innerHeight}`,
-    dpr: Math.round(devicePixelRatio * 100) / 100,
-    orientation: innerWidth > innerHeight ? 'landscape' : 'portrait',
-    ua: navigator.userAgent.slice(0, 180),
-    platform: navigator.userAgentData?.platform || navigator.platform || '',
-    lang: navigator.language,
-    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    version: GAME_VERSION,
-    fps: Math.round(runFrames / elapsed),
-    attempts: readCounter('attempts'),
-    falls: readCounter('falls'),
-  };
 }
 let crowd = [];      // público animado junto a la meta (lo puebla makeCrowd)
 const jumpPowderGeometry = new THREE.SphereGeometry(0.16, 6, 4);
@@ -194,6 +170,36 @@ const snow = createSnowSound();
 const nameInput = document.getElementById('player-name');
 nameInput.value = playerName();
 let sessionName = '';
+let racePlayerId = null;
+const googleButton = document.getElementById('btn-google');
+const signoutButton = document.getElementById('btn-signout');
+const authError = document.getElementById('auth-error');
+auth.subscribe((user) => {
+  googleButton.hidden = !!user;
+  signoutButton.hidden = !user;
+  document.getElementById('auth-status').textContent = user
+    ? `Sesión iniciada: ${user.email || 'cuenta de Google'}. Tu apodo es público; tu correo no.`
+    : 'Juega como invitado o inicia sesión con Google para publicar tus marcas.';
+  document.getElementById('btn-continue').textContent = user ? 'Continuar →' : 'Jugar como invitado →';
+});
+auth.initialize().catch(() => {
+  authError.textContent = 'No se pudo recuperar la sesión. Puedes volver a entrar con Google o jugar como invitado.';
+}).finally(() => { googleButton.disabled = false; });
+googleButton.addEventListener('click', async () => {
+  googleButton.disabled = true;
+  authError.textContent = '';
+  savePlayerName(nameInput.value);
+  try { await auth.signIn(); }
+  catch (error) { authError.textContent = error.message; }
+  finally { googleButton.disabled = false; }
+});
+signoutButton.addEventListener('click', async () => {
+  signoutButton.disabled = true;
+  authError.textContent = '';
+  try { await auth.signOut(); }
+  catch (error) { authError.textContent = error.message; }
+  finally { signoutButton.disabled = false; }
+});
 const mobileControls = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 document.getElementById('btn-back-controls').textContent = mobileControls ? '‹ Nombre y controles' : '‹ Cambiar nombre';
@@ -308,27 +314,19 @@ async function showRanking() {
   const back = document.getElementById('btn-back-tracks');
   document.getElementById('rank-screen').classList.add('visible');
   title.textContent = 'Elige una pista';
-  subtitle.textContent = 'Consulta el ranking de las pistas donde ya tienes una marca.';
+  subtitle.textContent = 'Consulta las marcas globales y tu posición con tu cuenta de Google.';
   back.textContent = '‹ Volver a las pistas';
   list.className = 'rank-selector';
 
   const rankedTracks = Object.entries(TRACKS)
-    .map(([key, data]) => ({ key, data, best: loadBest(localStorage, data.name) }))
-    .filter(({ best }) => best != null);
-
-  if (rankedTracks.length === 0) {
-    list.className = '';
-    list.innerHTML = '<div class="rank-empty-state"><span class="rank-empty-icon">🏁</span>'
-      + '<h2>Aún no tienes marcas</h2><p>Completa una pista para desbloquear su ranking.</p></div>';
-    return;
-  }
+    .map(([key, data]) => ({ key, data, best: loadBest(localStorage, data.name) }));
 
   list.innerHTML = rankedTracks.map(({ key, data, best }) => `
     <button class="rank-choice" data-track="${key}" style="--accent:${data.accent}">
-      <span class="rank-choice-top"><span class="rank-choice-emoji">${data.emoji}</span><span class="rank-saved">Marca guardada</span></span>
+      <span class="rank-choice-top"><span class="rank-choice-emoji">${data.emoji}</span><span class="rank-saved">Ranking global</span></span>
       <span class="rank-choice-name">${data.name}</span>
       <span class="rank-times">
-        <span class="rank-time-block"><span class="rank-choice-label">Tu mejor tiempo</span><span class="rank-choice-time">${formatTime(best)}</span></span>
+        <span class="rank-time-block"><span class="rank-choice-label">Mejor en este dispositivo</span><span class="rank-choice-time">${best == null ? '—' : formatTime(best)}</span></span>
         <span class="rank-time-block"><span class="rank-choice-label">Mejor global</span><span class="rank-global-time" data-track="${key}">Consultando…</span></span>
       </span>
       <span class="rank-gap" data-track="${key}">Calculando diferencia…</span>
@@ -352,6 +350,7 @@ async function showRanking() {
           return;
         }
         globalTime.textContent = formatTime(rows[0].time_cs / 100);
+        if (best == null) { gap.textContent = 'Completa una bajada para guardar tu tiempo'; return; }
         const deltaCs = Math.max(0, Math.round(best * 100) - rows[0].time_cs);
         gap.textContent = deltaCs === 0 ? '¡Tienes el mejor tiempo!' : `+${(deltaCs / 100).toFixed(2).replace('.', ',')} s del mejor`;
         gap.classList.toggle('is-leading', deltaCs === 0);
@@ -483,6 +482,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function restart() {
+  racePlayerId = playerId();
   landingAge = 1;
   landingImpact = 0;
   skiVisualPose = null;
@@ -499,7 +499,6 @@ function restart() {
   steerSmooth = 0;
   runMaxSpeed = 0;
   crashSpeed = 0;
-  runFrames = 0;
   clearJumpPowder();
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
@@ -550,15 +549,16 @@ function autopilotSteer() {
   return turnRate > 0 ? Math.max(-1, Math.min(1, desiredTurnRate / turnRate)) : 0;
 }
 
-function sendScore(name) {
+function sendScore(name, timeSec, speedKmh) {
   const status = document.getElementById('submit-status');
-  const best = loadBest(localStorage, track.data.name);
-  const bestSpeed = loadBestSpeed(localStorage, track.data.name);
-  if (best == null) return;
+  if (!racePlayerId || racePlayerId !== playerId()) {
+    status.textContent = 'Inicia sesión con Google antes de la bajada para publicar tu marca.';
+    return;
+  }
   status.textContent = 'Subiendo al ranking…';
-  submitScore({ track: track.data.name, name, timeSec: best, speedKmh: bestSpeed, meta: buildMeta() })
+  submitScore({ track: track.data.name, name, timeSec, speedKmh, expectedPlayerId: racePlayerId })
     .then(() => { status.textContent = `🏆 En el ranking como ${name}`; })
-    .catch(() => { status.textContent = 'No se pudo subir (sin conexión)'; });
+    .catch((error) => { status.textContent = error.message; });
 }
 
 function finish() {
@@ -570,7 +570,7 @@ function finish() {
   const isRecord = recordEligible ? saveBest(localStorage, track.data.name, time) : false;
   if (recordEligible) saveBestSpeed(localStorage, track.data.name, maxKmh);
   document.getElementById('submit-status').textContent = '';
-  if (recordEligible && sessionName) sendScore(sessionName);
+  if (recordEligible && sessionName) sendScore(sessionName, time, maxKmh);
   const best = loadBest(localStorage, track.data.name);
   const bestSpeed = loadBestSpeed(localStorage, track.data.name);
   document.getElementById('finish-track').textContent = `Pista ${track.data.name}`;
@@ -727,7 +727,6 @@ function tick(now) {
       const prevStatus = race.status;
       race = updateRace(race, player.s, now);
       if (prevStatus === 'ready' && race.status === 'running') bumpCounter('attempts');
-      if (race.status === 'running') runFrames += 1;
     }
     if (race.status === 'running') runMaxSpeed = Math.max(runMaxSpeed, player.speed);
     if (player.fallen && !prev.fallen) {

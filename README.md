@@ -36,11 +36,17 @@ npm run deploy:vercel
 La primera vez, inicia sesión en Vercel y vincula o crea el proyecto `ski-game`.
 `vercel.json` configura la compilación y publica únicamente `dist/`, que contiene
 el HTML, los módulos del juego, los sonidos, la fuente y Three.js.
-El ranking sigue usando el proyecto de Supabase configurado en `src/ranking.js`.
+El ranking usa el proyecto de Supabase configurado en `src/supabase-client.js`.
 También puedes importar el repositorio desde Vercel; la configuración se detecta
 automáticamente. `npm run deploy` conserva el despliegue existente a GitHub Pages.
 
-## Desarrollo local
+## Acceso con Google
+
+Los invitados pueden jugar; publicar en el ranking requiere Google. Consulta
+[la configuración de OAuth](docs/google-auth.md) para activar el proveedor y las
+URLs de retorno en Supabase. No se necesitan secretos en Vercel.
+
+## Pruebas
 
 - `npm test` — tests unitarios (física, pista, cronómetro) con `node --test`.
 - Las pistas son datos: añade un archivo en `src/tracks/` con puntos de control y obstáculos.

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#071c2b">
+<meta name="referrer" content="no-referrer">
 <title>Downhill Ski Challenge</title>
 <style>
   @font-face { font-family: 'Titan One'; src: url('assets/fonts/titan-one.woff2') format('woff2'); font-display: swap; }
@@ -292,6 +293,12 @@
   #start-screen #name-hint { font-size: .85rem; color: #bbcedb; }
   #name-error:empty { display: none; }
   #name-error { color: #ffcf9e; }
+  .auth-panel { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid #64879b; margin-bottom: 6px; }
+  #btn-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; border-radius: 12px; font: 600 16px system-ui, sans-serif; padding: 14px 18px; }
+  #auth-status { overflow-wrap: anywhere; font-size: .85rem; color: #bbcedb; }
+  #auth-error { color: #ffcf9e; font-size: .85rem; }
+  #auth-error:empty { display: none; }
+  button:disabled { opacity: .6; cursor: wait; }
   #start-screen button { width: 100%; }
   .overlay button.primary { background: #b8efdc; color: #102c32; }
   .overlay button small { font-size: .85rem; line-height: 1.45; margin-top: 6px; }
@@ -407,11 +414,17 @@
   <h1 id="game-logo"><span class="logo-text">Downhill Ski Challenge</span><span class="logo-emoji">⛷️</span></h1>
   <form id="player-form" class="welcome-panel">
     <span class="eyebrow">TU PRÓXIMA BAJADA EMPIEZA AQUÍ</span>
+    <div class="auth-panel">
+      <button id="btn-google" type="button" disabled>Continuar con Google</button>
+      <p id="auth-status" role="status">Comprobando sesión…</p>
+      <button id="btn-signout" type="button" class="text-button" hidden>Cerrar sesión</button>
+      <p id="auth-error" role="alert"></p>
+    </div>
     <label for="player-name">¿Cómo te llamas?</label>
     <input id="player-name" name="nickname" type="text" maxlength="12" required autocomplete="nickname" enterkeyhint="next" placeholder="Tu nombre" aria-describedby="name-hint name-error">
     <p id="name-hint">Hasta 12 caracteres. Usaremos este nombre en el ranking.</p>
     <p id="name-error" role="alert"></p>
-    <button type="submit" class="primary">Continuar →</button>
+    <button id="btn-continue" type="submit" class="primary">Jugar como invitado →</button>
   </form>
   <div id="control-panel" class="welcome-panel" hidden>
     <span class="eyebrow">PREPARA TU BAJADA</span>
