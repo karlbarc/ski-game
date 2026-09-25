@@ -806,9 +806,10 @@ function tick(now) {
 
   if (started && !paused && startSequence.released && race.status !== 'finished') {
     const rawSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
-    steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * 3);
+    const brake = AUTOPILOT ? 0 : controls.brake();
+    steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * (3 + brake * 12));
     const prev = player;
-    player = stepPlayer(player, steerSmooth, dt, track);
+    player = stepPlayer(player, steerSmooth, dt, track, PARAMS, brake);
     if (!player.fallen) {
       const prevStatus = race.status;
       race = updateRace(race, player.s, now);

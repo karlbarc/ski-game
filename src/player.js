@@ -6,6 +6,9 @@ export const PARAMS = {
   turnRate: 1.0,       // rad/s con steer a tope a turnReferenceSpeed
   turnReferenceSpeed: 15, // m/s: el giro crece proporcionalmente a la velocidad
   maxHeading: 1.1,     // rad
+  brakeHeading: 1.45, // esquís casi atravesados respecto a la pendiente
+  brakeTurnMultiplier: 3.5,
+  brakeDecel: 24,     // m/s²: derrape fuerte con los cantos sobre la nieve
   jumpLaunchFactor: 0.12,
   minJumpVy: 2.0,
   rampLength: 6,       // la rampa sube desde o.s - rampLength hasta el labio en o.s
@@ -70,25 +73,29 @@ export function turnRateAtSpeed(speed, params = PARAMS) {
   return params.turnRate * Math.max(0, Math.min(params.maxSpeed, speed)) / params.turnReferenceSpeed;
 }
 
-export function stepPlayer(state, steer, dt, track, params = PARAMS) {
+export function stepPlayer(state, steer, dt, track, params = PARAMS, brake = 0) {
   const st = { ...state };
   if (st.fallen) return st; // en el suelo hasta que recoverPlayer lo levante
 
   const frame = track.frameAt(st.s);
 
   if (!st.airborne) {
-    st.heading += steer * turnRateAtSpeed(st.speed, params) * dt;
-    st.heading = Math.max(-params.maxHeading, Math.min(params.maxHeading, st.heading));
+    brake = Math.max(0, Math.min(1, brake));
+    st.heading += steer * turnRateAtSpeed(st.speed, params)
+      * (1 + brake * (params.brakeTurnMultiplier - 1)) * dt;
+    const maxHeading = params.maxHeading + brake * (params.brakeHeading - params.maxHeading);
+    st.heading = Math.max(-maxHeading, Math.min(maxHeading, st.heading));
     const slope = -frame.tan.y; // seno de la pendiente, positivo cuesta abajo
     const carveBrake = st.speed > params.crawlSpeed
       ? params.carveBrake * Math.abs(Math.sin(st.heading))
       : 0;
     const tuck = params.tuckAccel * Math.max(0, 1 - Math.abs(st.heading) / params.tuckWindow);
     const accel = params.gravity * slope * Math.cos(st.heading)
-      + tuck
+      + tuck * (1 - brake)
       - params.friction
       - params.drag * st.speed * st.speed
-      - carveBrake;
+      - carveBrake
+      - brake * params.brakeDecel;
     st.speed = Math.max(0, Math.min(params.maxSpeed, st.speed + accel * dt));
   } else {
     st.height += st.vy * dt;

@@ -9,6 +9,32 @@ import { negra } from '../src/tracks/negra.js';
 
 const track = buildTrack(verde);
 
+test('hard braking crosses the skis, sheds most speed, and allows recovery after release', () => {
+  const piste = { width: 200, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
+  for (const side of [-1, 1]) {
+    let braking = { ...createPlayerState(), speed: 25 };
+    let normal = { ...braking };
+    for (let i = 0; i < 45; i++) {
+      braking = stepPlayer(braking, side, 1 / 60, piste, PARAMS, 1);
+      normal = stepPlayer(normal, side, 1 / 60, piste);
+    }
+    assert.ok(braking.heading * side > PARAMS.maxHeading);
+    assert.ok(braking.speed < 7, `hard braking speed=${braking.speed}`);
+    assert.ok(normal.speed > 18);
+    for (let i = 0; i < 120; i++) braking = stepPlayer(braking, side, 1 / 60, piste, PARAMS, 1);
+    assert.equal(braking.speed, 0);
+    for (let i = 0; i < 120; i++) braking = stepPlayer(braking, -side, 1 / 60, piste);
+    assert.ok(braking.speed > 1, 'can start skiing again after releasing the brake');
+    assert.equal(braking.fallen, false);
+  }
+});
+
+test('braking cannot slow or turn the skier in midair', () => {
+  const start = { ...createPlayerState(), speed: 20, airborne: true, height: 3, vy: 2 };
+  assert.deepEqual(stepPlayer(start, 1, 1 / 60, track, PARAMS, 1),
+    stepPlayer(start, 1, 1 / 60, track));
+});
+
 function run(state, steer, seconds) {
   const dt = 1 / 60;
   for (let t = 0; t < seconds; t += dt) state = stepPlayer(state, steer, dt, track);
