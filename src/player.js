@@ -10,6 +10,7 @@ export const PARAMS = {
   brakeTurnMultiplier: 3.5,
   brakeDecel: 24,     // m/s²: frenada base con los cantos sobre la nieve
   brakeSpeedGain: 0.8, // m/s² extra por cada m/s de velocidad
+  brakeReturnRate: 30, // recupera el rumbo en unos 0.2 s al soltar el freno
   jumpLaunchFactor: 0.12,
   minJumpVy: 2.0,
   rampLength: 6,       // la rampa sube desde o.s - rampLength hasta el labio en o.s
@@ -26,6 +27,7 @@ export function createPlayerState() {
     s: 0, lat: 0, heading: 0, speed: 0,
     height: 0, vy: 0, airborne: false,
     fallen: false,
+    braking: false, brakeReturnHeading: null,
   };
 }
 
@@ -56,6 +58,8 @@ function fall(st, track, params, obstacle) {
   st.fallen = true;
   st.speed = 0;
   st.heading = 0;
+  st.braking = false;
+  st.brakeReturnHeading = null;
   st.airborne = false;
   st.height = 0;
   st.vy = 0;
@@ -82,10 +86,22 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS, brake = 0) 
 
   if (!st.airborne) {
     brake = Math.max(0, Math.min(1, brake));
-    st.heading += steer * turnRateAtSpeed(st.speed, params)
-      * (1 + brake * (params.brakeTurnMultiplier - 1)) * dt;
-    const maxHeading = params.maxHeading + brake * (params.brakeHeading - params.maxHeading);
-    st.heading = Math.max(-maxHeading, Math.min(maxHeading, st.heading));
+    if (brake > 0 && !st.braking) st.brakeReturnHeading = st.heading;
+    st.braking = brake > 0;
+    if (!st.braking && st.brakeReturnHeading != null) {
+      // Recupera el rumbo incluso si la frenada llegó a detener al esquiador.
+      // El giro residual del control no debe impedir terminar esta maniobra.
+      st.heading += (st.brakeReturnHeading - st.heading) * (1 - Math.exp(-params.brakeReturnRate * dt));
+      if (Math.abs(st.brakeReturnHeading - st.heading) < 0.005) {
+        st.heading = st.brakeReturnHeading;
+        st.brakeReturnHeading = null;
+      }
+    } else {
+      st.heading += steer * turnRateAtSpeed(st.speed, params)
+        * (1 + brake * (params.brakeTurnMultiplier - 1)) * dt;
+      const maxHeading = params.maxHeading + brake * (params.brakeHeading - params.maxHeading);
+      st.heading = Math.max(-maxHeading, Math.min(maxHeading, st.heading));
+    }
     const slope = -frame.tan.y; // seno de la pendiente, positivo cuesta abajo
     const carveBrake = st.speed > params.crawlSpeed
       ? params.carveBrake * Math.abs(Math.sin(st.heading))
@@ -109,10 +125,16 @@ export function stepPlayer(state, steer, dt, track, params = PARAMS, brake = 0) 
   }
 
   const sPrev = st.s;
-  const ds = st.speed * Math.cos(st.heading) * dt;
+  // Al derrapar, los esquís se cruzan pero la inercia sigue el rumbo previo.
+  // Conserva esa trayectoria también durante el breve retorno de los esquís.
+  const travelHeading = st.brakeReturnHeading ?? st.heading;
+  const ds = st.speed * Math.cos(travelHeading) * dt;
   st.s += ds;
-  st.lat += st.speed * Math.sin(st.heading) * dt;
+  st.lat += st.speed * Math.sin(travelHeading) * dt;
   st.heading -= frame.curvature * ds; // la pista gira bajo el jugador
+  // El rumbo guardado usa el mismo marco que heading: conserva la dirección
+  // original en el mundo aunque la pista se curve durante la maniobra.
+  if (st.brakeReturnHeading != null) st.brakeReturnHeading -= frame.curvature * ds;
 
   const halfWidth = track.width / 2;
 

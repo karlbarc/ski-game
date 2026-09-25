@@ -29,6 +29,62 @@ test('hard braking crosses the skis, sheds most speed, and allows recovery after
   }
 });
 
+test('releasing the brake smoothly restores the previous direction, even from a stop', () => {
+  const piste = { width: 200, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
+  for (const side of [-1, 1]) {
+    const originalHeading = side * 0.3;
+    let st = { ...createPlayerState(), speed: 25, heading: originalHeading };
+    for (let i = 0; i < 120; i++) st = stepPlayer(st, side, 1 / 60, piste, PARAMS, 1);
+    assert.equal(st.speed, 0);
+    assert.equal(st.brakeReturnHeading, originalHeading);
+    const brakedHeading = st.heading;
+    st = stepPlayer(st, side, 1 / 60, piste);
+    assert.ok(Math.abs(st.heading - originalHeading) < Math.abs(brakedHeading - originalHeading));
+    assert.ok(Math.abs(st.heading - brakedHeading) < Math.abs(originalHeading - brakedHeading), 'return is interpolated');
+    // Holding the direction key after releasing Shift must still allow the return.
+    for (let i = 0; i < 14 && st.brakeReturnHeading != null; i++) {
+      st = stepPlayer(st, side, 1 / 60, piste);
+    }
+    assert.equal(st.brakeReturnHeading, null);
+    assert.equal(st.heading, originalHeading);
+    assert.ok(st.speed > 0);
+    const turned = stepPlayer(st, side, 1 / 60, piste);
+    assert.ok((turned.heading - st.heading) * side > 0, 'normal steering resumes');
+    const rebraked = stepPlayer(turned, -side, 1 / 60, piste, PARAMS, 1);
+    assert.equal(rebraked.brakeReturnHeading, turned.heading, 'a new brake saves the new heading');
+  }
+});
+
+test('braking near either piste edge does not redirect momentum sideways', () => {
+  const piste = { width: 10, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
+  for (const side of [-1, 1]) {
+    let st = { ...createPlayerState(), lat: side * 4.5, speed: PARAMS.maxSpeed };
+    for (let i = 0; i < 30; i++) st = stepPlayer(st, side, 1 / 60, piste, PARAMS, 1);
+    assert.ok(Math.abs(st.heading) > 1, 'skis turn across the slope to brake');
+    assert.equal(st.lat, side * 4.5, 'momentum stays along the original direction');
+    assert.equal(st.fallen, false);
+    for (let i = 0; i < 15; i++) st = stepPlayer(st, 0, 1 / 60, piste);
+    assert.equal(st.brakeReturnHeading, null, 'returns within a quarter second');
+    assert.equal(st.heading, 0);
+    assert.equal(st.lat, side * 4.5);
+    assert.equal(st.fallen, false);
+  }
+});
+
+test('the saved braking direction follows the track reference frame and clears on a fall', () => {
+  const piste = { width: 200, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0.02 }) };
+  let st = { ...createPlayerState(), speed: 25, heading: 0.2 };
+  for (let i = 0; i < 12; i++) st = stepPlayer(st, 1, 1 / 60, piste, PARAMS, 1);
+  assert.ok(Math.abs(st.brakeReturnHeading + 0.02 * st.s - 0.2) < 1e-10);
+  for (let i = 0; i < 90 && st.brakeReturnHeading != null; i++) st = stepPlayer(st, 0, 1 / 60, piste);
+  assert.equal(st.brakeReturnHeading, null);
+  assert.ok(Math.abs(st.heading + 0.02 * st.s - 0.2) < 1e-10);
+  st = stepPlayer({ ...st, lat: 101 }, 1, 1 / 60, piste, PARAMS, 1);
+  assert.equal(st.fallen, true);
+  assert.equal(st.brakeReturnHeading, null);
+  assert.equal(st.braking, false);
+});
+
 test('the same brake input sheds more speed at higher speeds', () => {
   const piste = { width: 200, obstacles: [], frameAt: () => ({ tan: { y: -0.3 }, curvature: 0 }) };
   const dt = 1 / 60;
