@@ -421,7 +421,7 @@ document.getElementById('btn-back-tracks').addEventListener('click', () => {
 document.getElementById('btn-menu-pause').addEventListener('click', goToMenu);
 
 let selectedTrack = TRACKS[query.get('track')] ? query.get('track') : 'verde';
-let selectedCategory = null;
+let selectedCategory = TRACKS[selectedTrack].category;
 
 // Metadatos por pista para las tarjetas del menú (calculados una vez).
 const TRACK_INFO = {};
