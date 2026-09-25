@@ -91,6 +91,34 @@ test('downward drag brakes progressively on either side and releases cleanly', a
   }
 });
 
+test('horizontal swipe steers by distance and a fast movement brakes', async () => {
+  const previousWidth = globalThis.innerWidth;
+  globalThis.innerWidth = 400;
+  try {
+    const handlers = {};
+    const controls = createControls({ addEventListener(type, fn) { handlers[type] = fn; } });
+    await controls.setMode('swipe');
+    const finger = (x) => ({ identifier: 1, clientX: x, clientY: 200 });
+    const emit = (type, x, timeStamp) => handlers[type]({
+      touches: x == null ? [] : [finger(x)], timeStamp, preventDefault() {},
+    });
+
+    emit('touchstart', 200, 0);
+    emit('touchmove', 245, 100);
+    assert.equal(controls.steer(), -0.5);
+    assert.equal(controls.brake(), 0, 'a measured slide only steers');
+    emit('touchmove', 155, 140);
+    assert.equal(controls.steer(), 0.5);
+    assert.equal(controls.brake(), 1, 'a very fast slide fully brakes');
+    emit('touchend', null, 150);
+    assert.equal(controls.steer(), 0);
+    assert.equal(controls.brake(), 0);
+  } finally {
+    if (previousWidth === undefined) delete globalThis.innerWidth;
+    else globalThis.innerWidth = previousWidth;
+  }
+});
+
 test('name editing and menu scrolling do not steer or cancel native input', () => {
   const handlers = {};
   const controls = createControls({ addEventListener(type, fn) { handlers[type] = fn; } });

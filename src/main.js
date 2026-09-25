@@ -244,6 +244,7 @@ document.getElementById('player-form').addEventListener('submit', (event) => {
 document.getElementById('btn-edit-name').addEventListener('click', showNameForm);
 
 document.getElementById('btn-touch').addEventListener('click', () => chooseControl('touch'));
+document.getElementById('btn-swipe').addEventListener('click', () => chooseControl('swipe'));
 document.getElementById('btn-gyro').addEventListener('click', () => chooseControl('gyro'));
 document.getElementById('btn-back-controls').addEventListener('click', () => {
   document.getElementById('track-screen').classList.remove('visible');
