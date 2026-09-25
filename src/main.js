@@ -148,6 +148,7 @@ let player = createPlayerState();
 let race = createRace(START_S, FINISH_S);
 let started = false;
 let finishShown = false;
+let finishResultToken = 0;
 let paused = false;
 let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
 let runMaxSpeed = 0; // velocidad máxima de la bajada actual (m/s)
@@ -256,6 +257,14 @@ function goToMenu() {
   snow.playMenu();
 }
 document.getElementById('btn-menu').addEventListener('click', goToMenu);
+document.getElementById('btn-finish-ranking').addEventListener('click', () => {
+  started = false;
+  snow.playMenu();
+  hud.hideFinish();
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('rank-screen').classList.add('visible');
+  showTrackRanking(selectedTrack);
+});
 
 // Mute global (música + efectos), persistente entre sesiones.
 let soundMuted = localStorage.getItem('ski-muted') === '1';
@@ -483,6 +492,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function restart() {
+  finishResultToken += 1;
   racePlayerId = playerId();
   landingAge = 1;
   landingImpact = 0;
@@ -550,16 +560,29 @@ function autopilotSteer() {
   return turnRate > 0 ? Math.max(-1, Math.min(1, desiredTurnRate / turnRate)) : 0;
 }
 
-function sendScore(name, timeSec, speedKmh) {
+async function sendScore(name, timeSec, speedKmh, resultToken) {
   const status = document.getElementById('submit-status');
+  const rankStatus = document.getElementById('finish-rank');
   if (!racePlayerId || racePlayerId !== playerId()) {
     status.textContent = 'Inicia sesión con Google antes de la bajada para publicar tu marca.';
+    rankStatus.textContent = 'Como invitado no tienes una posición global.';
     return;
   }
   status.textContent = 'Subiendo al ranking…';
-  submitScore({ track: track.data.name, name, timeSec, speedKmh, expectedPlayerId: racePlayerId })
-    .then(() => { status.textContent = `🏆 En el ranking como ${name}`; })
-    .catch((error) => { status.textContent = error.message; });
+  rankStatus.textContent = 'Calculando tu posición…';
+  try {
+    await submitScore({ track: track.data.name, name, timeSec, speedKmh, expectedPlayerId: racePlayerId });
+    const mine = await fetchMyRank(track.data.name);
+    if (resultToken !== finishResultToken) return;
+    status.textContent = `🏆 Marca publicada como ${name}`;
+    rankStatus.textContent = mine
+      ? `Quedaste en el puesto #${mine.rank} del ranking de ${track.data.name}.`
+      : 'Tu marca se publicó, pero no pudimos calcular la posición.';
+  } catch (error) {
+    if (resultToken !== finishResultToken) return;
+    status.textContent = error.message;
+    rankStatus.textContent = 'No pudimos calcular tu posición global.';
+  }
 }
 
 function finish() {
@@ -568,10 +591,14 @@ function finish() {
   const time = race.elapsed;
   const maxKmh = Math.round(runMaxSpeed * 3.6);
   const recordEligible = TIMESCALE === 1 && !AUTOPILOT;
+  const resultToken = ++finishResultToken;
   const isRecord = recordEligible ? saveBest(localStorage, track.data.name, time) : false;
   if (recordEligible) saveBestSpeed(localStorage, track.data.name, maxKmh);
   document.getElementById('submit-status').textContent = '';
-  if (recordEligible && sessionName) sendScore(sessionName, time, maxKmh);
+  document.getElementById('finish-rank').textContent = recordEligible
+    ? 'Calculando tu posición…'
+    : 'Esta bajada de prueba no afecta al ranking.';
+  if (recordEligible && sessionName) sendScore(sessionName, time, maxKmh, resultToken);
   const best = loadBest(localStorage, track.data.name);
   const bestSpeed = loadBestSpeed(localStorage, track.data.name);
   document.getElementById('finish-track').textContent = `Pista ${track.data.name}`;

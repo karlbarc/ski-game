@@ -162,9 +162,11 @@
   .finish-metric { min-width: 0; padding: 14px 15px; border: 1px solid rgba(210, 236, 249, .12); border-radius: 15px; background: rgba(4, 22, 35, .38); text-align: left; }
   #finish-best, #finish-speed { margin-top: 6px; color: #fff; font-size: .95rem !important; font-weight: 750; line-height: 1.3; }
   #submit-status { min-height: 1.4em; margin: 14px 0; color: #ffd166; font-size: .82rem !important; font-weight: 700; }
-  .finish-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 10px; }
+  #finish-rank { width: 100%; padding: 11px 14px; border: 1px solid rgba(255, 209, 102, .35); border-radius: 13px; background: rgba(255, 209, 102, .1); color: #ffe7a3; font-size: .92rem; font-weight: 800; }
+  .finish-actions { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; gap: 10px; }
   #finish-screen .finish-actions button { min-width: 0; min-height: 54px; padding: 12px 14px; font-size: .94rem; }
   #finish-screen #btn-restart { background: #b8efdc; border-color: #d5faed; color: #102c32; }
+  #finish-screen #btn-finish-ranking { background: rgba(255, 209, 102, .2); border-color: rgba(255, 209, 102, .45); }
   #finish-screen #btn-menu { background: rgba(81, 126, 156, .38); }
   #fall-screen { background: linear-gradient(145deg, rgba(7,24,40,.88), rgba(17,51,73,.82)); }
   .fall-panel {
@@ -468,8 +470,10 @@
       <div class="finish-metric"><span class="result-label">Velocidad máxima</span><p id="finish-speed"></p></div>
     </div>
     <p id="submit-status" role="status"></p>
+    <p id="finish-rank" role="status">Calculando tu posición…</p>
     <div class="finish-actions">
       <button id="btn-restart">Reintentar ↻</button>
+      <button id="btn-finish-ranking">Ver ranking 🏆</button>
       <button id="btn-menu">Elegir otra pista</button>
     </div>
   </section>
