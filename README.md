@@ -26,7 +26,21 @@ Chocar con un árbol, una roca o salirte de la pista termina el intento: se
 muestran los metros que avanzaste y toca **Volver a empezar**.
 El mejor tiempo y la velocidad máxima se guardan en el navegador.
 
-## Desarrollo
+## Desplegar en Vercel
+
+```bash
+npm run build
+npm run deploy:vercel
+```
+
+La primera vez, inicia sesión en Vercel y vincula o crea el proyecto `ski-game`.
+`vercel.json` configura la compilación y publica únicamente `dist/`, que contiene
+el HTML, los módulos del juego, los sonidos, la fuente y Three.js.
+El ranking sigue usando el proyecto de Supabase configurado en `src/ranking.js`.
+También puedes importar el repositorio desde Vercel; la configuración se detecta
+automáticamente. `npm run deploy` conserva el despliegue existente a GitHub Pages.
+
+## Desarrollo local
 
 - `npm test` — tests unitarios (física, pista, cronómetro) con `node --test`.
 - Las pistas son datos: añade un archivo en `src/tracks/` con puntos de control y obstáculos.

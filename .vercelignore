@@ -1,0 +1,13 @@
+.env*
+dist
+supabase
+tests
+docs
+lamborghini_design
+*.blend
+*.blend1
+*.stl
+*.png
+*.py
+.superpowers
+CLAUDE.md
