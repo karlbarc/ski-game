@@ -273,6 +273,61 @@ export function createSkier() {
 export function poseSkier(skier, { steer, airborne, fallen, dip = 0 }) {
   const body = skier.userData.body;
   const { hips, torso, head, limbs } = skier.userData.rig;
+  if (fallen) {
+    // Pose de impacto inspirada en una caída real: el cuerpo queda tendido
+    // sobre la nieve, con las extremidades abiertas y el material desparramado.
+    // Todo se articula en el espacio local para que la pendiente pueda seguir
+    // orientando el conjunto desde el grupo raíz.
+    const pelvis = new THREE.Vector3(-0.04, 0.22, 0.15);
+    const neck = new THREE.Vector3(0.08, 0.24, -0.29);
+    const spine = neck.clone().sub(pelvis).normalize();
+    const laidDown = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0), spine,
+    );
+
+    hips.position.copy(pelvis);
+    hips.quaternion.copy(laidDown);
+    torso.position.copy(pelvis);
+    torso.scale.y = neck.distanceTo(pelvis) / 0.49;
+    torso.quaternion.copy(laidDown);
+    head.position.copy(neck).add(new THREE.Vector3(0.055, -0.015, -0.105));
+    head.quaternion.copy(laidDown);
+    head.rotateY(-0.42);
+    head.rotateZ(0.16);
+
+    for (const limb of limbs) {
+      const s = limb.side;
+      const hip = pelvis.clone().add(new THREE.Vector3(s * 0.11, 0.015, 0.015));
+      const knee = new THREE.Vector3(s * (s < 0 ? 0.36 : 0.43), 0.18,
+        s < 0 ? 0.49 : 0.42);
+      const ankle = new THREE.Vector3(s * (s < 0 ? 0.70 : 0.62), 0.12,
+        s < 0 ? 0.78 : 0.86);
+      limb.boot.position.copy(ankle);
+      limb.boot.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0), knee.clone().sub(ankle).normalize(),
+      );
+      limb.boot.rotateY(s * 0.22);
+      limb.leg.set(hip, knee, ankle);
+
+      const shoulder = new THREE.Vector3(s * 0.19, 0.25, -0.13);
+      const elbow = new THREE.Vector3(s * (s < 0 ? 0.51 : 0.55), 0.13,
+        s < 0 ? -0.02 : -0.13);
+      const hand = new THREE.Vector3(s * (s < 0 ? 0.79 : 0.84), 0.10,
+        s < 0 ? 0.12 : -0.02);
+      limb.glove.position.copy(hand);
+      limb.glove.rotation.set(-1.15, -s * 0.24, s * 0.34);
+      limb.arm.set(shoulder, elbow, hand);
+      const tip = new THREE.Vector3(s * (s < 0 ? 1.13 : 1.20), 0.055,
+        s < 0 ? 0.78 : 0.62);
+      limb.pole.set(hand, tip);
+      limb.basket.position.copy(tip).lerp(hand, 0.06);
+    }
+
+    body.rotation.set(0, 0.18, 0);
+    body.position.y = 0.035;
+    return;
+  }
+
   // El eje lateral del personaje apunta al lado opuesto del giro de la pista.
   const turn = -THREE.MathUtils.clamp(steer, -1, 1) * (airborne ? 0.35 : 1);
   const intensity = Math.abs(turn);
@@ -291,6 +346,10 @@ export function poseSkier(skier, { steer, airborne, fallen, dip = 0 }) {
   head.rotation.set(0.08, -turn * 0.12, -lean * 0.65);
   for (const limb of limbs) {
     const s = limb.side;
+    // La pose de caída mueve botas y las rota en los tres ejes; restablecerlas
+    // aquí evita que la siguiente bajada herede alguna de esas transformaciones.
+    limb.boot.position.set(s * 0.215, 0, 0);
+    limb.boot.rotation.set(0, 0, 0);
     // La pierna interior se recoge y la exterior sostiene el giro.
     const inside = Math.max(0, s * turn);
     const knee = new THREE.Vector3(limb.boot.position.x + turn * 0.25,
@@ -317,7 +376,7 @@ export function poseSkier(skier, { steer, airborne, fallen, dip = 0 }) {
     limb.pole.set(hand, tip);
     limb.basket.position.copy(tip).lerp(hand, 0.06);
   }
-  // La caída transforma todo el cuerpo; al esquiar, el balanceo nace en las rodillas.
-  body.rotation.set(fallen ? -0.35 : 0, 0, fallen ? 1.2 : 0);
-  body.position.y = fallen ? 0.18 : 0;
+  // Al esquiar, el balanceo nace en las rodillas; el grupo raíz queda limpio.
+  body.rotation.set(0, 0, 0);
+  body.position.y = 0;
 }
