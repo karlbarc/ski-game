@@ -8,7 +8,7 @@ import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
 } from './race.js?v=1784480748';
-import { createControls } from './controls.js?v=1784480748';
+import { createControls, loadControlMode, saveControlMode } from './controls.js?v=1790467200';
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank, claimPlayerName } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
@@ -226,10 +226,15 @@ function continueWithName(name) {
   nameInput.removeAttribute('aria-invalid');
   document.getElementById('name-error').textContent = '';
   nameInput.blur();
-  if (!mobileControls) {
-    chooseControl('touch');
+  const savedControlMode = loadControlMode(localStorage);
+  if (savedControlMode || !mobileControls) {
+    chooseControl(savedControlMode || 'touch');
     return;
   }
+  showControlPicker();
+}
+
+function showControlPicker() {
   document.getElementById('player-form').hidden = true;
   document.getElementById('control-panel').hidden = false;
   document.getElementById('btn-touch').focus();
@@ -342,6 +347,11 @@ document.getElementById('btn-edit-name').addEventListener('click', showNameForm)
 document.getElementById('btn-touch').addEventListener('click', () => chooseControl('touch'));
 document.getElementById('btn-swipe').addEventListener('click', () => chooseControl('swipe'));
 document.getElementById('btn-gyro').addEventListener('click', () => chooseControl('gyro'));
+document.getElementById('btn-change-controls').addEventListener('click', () => {
+  document.getElementById('track-screen').classList.remove('visible');
+  document.getElementById('start-screen').classList.add('visible');
+  showControlPicker();
+});
 document.getElementById('btn-back-controls').addEventListener('click', () => {
   document.getElementById('track-screen').classList.remove('visible');
   document.getElementById('start-screen').classList.add('visible');
@@ -626,13 +636,14 @@ trackList.addEventListener('keydown', (event) => {
 });
 
 // Paso 1: elegir control (aquí se pide el permiso del giroscopio, dentro del gesto).
-function chooseControl(mode) {
+async function chooseControl(mode) {
   if (!sessionName) return;
   snow.start();
   snow.playMenu();
-  controls.setMode(mode).then((ok) => {
-    if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
-  });
+  const ok = await controls.setMode(mode);
+  const activeMode = ok ? mode : 'touch';
+  saveControlMode(localStorage, activeMode);
+  if (!ok) hud.flash('Giroscopio no disponible, usando táctil');
   hud.hideStart();
   buildTrackMenu();
   document.getElementById('track-screen').classList.add('visible');

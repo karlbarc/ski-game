@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { combineSteer } from '../src/controls.js';
+import {
+  combineSteer, CONTROL_MODE_KEY, loadControlMode, saveControlMode,
+} from '../src/controls.js';
 
 test('combineSteer picks the strongest input and clamps to [-1, 1]', () => {
   assert.equal(combineSteer(0, 0), 0);
@@ -8,6 +10,32 @@ test('combineSteer picks the strongest input and clamps to [-1, 1]', () => {
   assert.equal(combineSteer(-0.5, 0.2), -0.5);
   assert.equal(combineSteer(2, 0), 1);
   assert.equal(combineSteer(-3, 0.1), -1);
+});
+
+test('control selection persists only supported modes in browser storage', () => {
+  const values = new Map();
+  const storage = {
+    getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+
+  assert.equal(loadControlMode(storage), null);
+  assert.equal(saveControlMode(storage, 'swipe'), true);
+  assert.equal(values.get(CONTROL_MODE_KEY), 'swipe');
+  assert.equal(loadControlMode(storage), 'swipe');
+  assert.equal(saveControlMode(storage, 'unsupported'), false);
+  assert.equal(loadControlMode(storage), 'swipe');
+  values.set(CONTROL_MODE_KEY, 'corrupted');
+  assert.equal(loadControlMode(storage), null);
+});
+
+test('control preference tolerates unavailable browser storage', () => {
+  const storage = {
+    getItem() { throw new Error('blocked'); },
+    setItem() { throw new Error('blocked'); },
+  };
+  assert.equal(loadControlMode(storage), null);
+  assert.equal(saveControlMode(storage, 'touch'), false);
 });
 
 import { createControls } from '../src/controls.js';

@@ -4,6 +4,28 @@ export function combineSteer(...values) {
   return Math.max(-1, Math.min(1, out));
 }
 
+export const CONTROL_MODE_KEY = 'ski-control-mode';
+const CONTROL_MODES = new Set(['touch', 'swipe', 'gyro']);
+
+export function loadControlMode(storage) {
+  try {
+    const mode = storage.getItem(CONTROL_MODE_KEY);
+    return CONTROL_MODES.has(mode) ? mode : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveControlMode(storage, mode) {
+  if (!CONTROL_MODES.has(mode)) return false;
+  try {
+    storage.setItem(CONTROL_MODE_KEY, mode);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function createControls(target = window) {
   const state = { mode: 'touch', keyboard: 0, touch: 0, gyro: 0, brake: 0 };
   let gesture = null;

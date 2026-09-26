@@ -334,8 +334,9 @@
   .track-play-arrow { font-size: 1.05rem; transition: transform .16s ease; }
   .track-card:hover .track-play-arrow { transform: translateX(3px); }
   .menu-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-  #btn-back-controls, #btn-back-tracks, #btn-ranking { font-size: .9rem !important; padding: 11px 14px !important; opacity: 1; }
+  #btn-back-controls, #btn-back-tracks, #btn-change-controls, #btn-ranking { font-size: .9rem !important; padding: 11px 14px !important; opacity: 1; }
   #track-screen #btn-back-controls { color: #c5dce8; background: rgba(8, 30, 46, .48); }
+  #track-screen #btn-change-controls { color: #dcecf4; background: rgba(25, 66, 88, .78); border: 1px solid #9fc2d355; }
   #track-screen #btn-ranking { color: #102c32; background: #b8efdc; border-color: #d5faed; }
   .rank-row span:first-child { overflow-wrap: anywhere; text-align: left; }
   .rank-row span:last-child { white-space: nowrap; }
@@ -344,6 +345,7 @@
     .menu-header { align-items: stretch; flex-direction: column; gap: 14px; }
     .menu-actions { justify-content: stretch; }
     #track-screen .menu-actions button { flex: 1 1 0; }
+    #track-screen #btn-change-controls { flex-basis: 100%; order: 3; }
     #track-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .overlay .track-card { min-height: 310px; padding: 14px 12px; gap: 10px; border-radius: 16px; }
     .track-title { font-size: 1.2rem; }
@@ -491,7 +493,7 @@
 <div id="track-screen" class="overlay">
   <header class="menu-header">
     <div class="menu-header-copy"><span class="eyebrow">ELIGE TU PRÓXIMO DESAFÍO</span><h1>Explora la montaña</h1><p id="player-greeting"></p></div>
-    <div class="menu-actions"><button id="btn-back-controls">‹ Inicio</button><button id="btn-ranking">🏆 Ranking</button></div>
+    <div class="menu-actions"><button id="btn-back-controls">‹ Inicio</button><button id="btn-change-controls">🎮 Cambiar controles</button><button id="btn-ranking">🏆 Ranking</button></div>
   </header>
   <div id="category-list" role="group" aria-label="Elige una categoría"></div>
   <section id="track-carousel" aria-labelledby="category-title" aria-roledescription="carrusel" hidden>
@@ -572,6 +574,6 @@
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js?v=1784480748" } }
 </script>
-<script type="module" src="./src/main.js?v=1789743651"></script>
+<script type="module" src="./src/main.js?v=1790467200"></script>
 </body>
 </html>
