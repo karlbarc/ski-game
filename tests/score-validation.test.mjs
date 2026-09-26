@@ -20,4 +20,10 @@ test('unknown tracks and implausible values are rejected', () => {
   assert.throws(() => validateScore({ track: 'Verde', name: 'Snow', timeSec: 24.99, speedKmh: 80 }), /tiempo/);
   assert.throws(() => validateScore({ track: 'Verde', name: 'Snow', timeSec: 60, speedKmh: 201 }), /velocidad/);
   assert.throws(() => validateScore({ track: 'Verde', name: '', timeSec: 60, speedKmh: 80 }), /nombre/);
+  assert.throws(() => validateScore({ track: 'Verde', name: '123456789012345678901', timeSec: 60, speedKmh: 80 }), /20 caracteres/);
+});
+
+test('user names may contain up to 20 characters', () => {
+  const name = '12345678901234567890';
+  assert.equal(validateScore({ track: 'Verde', name, timeSec: 60, speedKmh: 80 }).name, name);
 });

@@ -71,9 +71,10 @@ test('authenticated players keep their chosen nickname', () => {
   assert.equal(authenticatedPlayerName(user, '  Powder  '), 'Powder');
 });
 
-test('a first Google login derives a short nickname from the profile', () => {
+test('a first Google login derives a nickname of at most 20 characters from the profile', () => {
   const user = { email: 'snow@example.com', user_metadata: { given_name: 'Montañista Andino' } };
-  assert.equal(authenticatedPlayerName(user), 'Montañista A');
+  assert.equal(authenticatedPlayerName(user), 'Montañista Andino');
+  assert.equal(authenticatedPlayerName({ user_metadata: { given_name: 'Montañista de la Patagonia' } }), 'Montañista de la Pat');
   assert.equal(authenticatedPlayerName({ email: 'skier@example.com', user_metadata: {} }), 'skier');
 });
 
@@ -82,6 +83,7 @@ function ranking(user) {
   const client = {
     auth: { async getSession() { return { data: { session: user ? { user } : null } }; } },
     functions: { async invoke(name, options) { invocations.push({ name, options }); return {}; } },
+    async rpc(name, options) { invocations.push({ name, options }); return { data: true }; },
   };
   return { api: createRankingApi(client), invocations };
 }
@@ -92,6 +94,14 @@ test('scores are submitted through the validating Edge Function', async () => {
   assert.deepEqual(invocations, [{
     name: 'submit-score',
     options: { body: { track: 'Verde', name: 'Snow', timeSec: 65, speedKmh: 85 } },
+  }]);
+});
+test('user name availability is checked by the database', async () => {
+  const { api, invocations } = ranking(null);
+  assert.equal(await api.isPlayerNameAvailable('  Montañista Andino  '), true);
+  assert.deepEqual(invocations, [{
+    name: 'is_player_name_available',
+    options: { candidate_name: 'Montañista Andino' },
   }]);
 });
 test('guests and account changes cannot invoke score submission', async () => {

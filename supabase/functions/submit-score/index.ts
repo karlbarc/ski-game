@@ -49,6 +49,16 @@ Deno.serve(async (request) => {
     return json({ error: error instanceof Error ? error.message : 'Solicitud inválida.' }, 400);
   }
 
+  const { data: nameAvailable, error: nameError } = await admin.rpc('is_player_name_available', {
+    candidate_name: score.name,
+    claimed_player_id: user.id,
+  });
+  if (nameError) {
+    console.error('submit-score name check failed', nameError.code);
+    return json({ error: 'No se pudo comprobar el nombre de usuario.' }, 500);
+  }
+  if (!nameAvailable) return json({ error: 'Ese nombre de usuario ya está en uso.' }, 409);
+
   const { error } = await admin.from('scores').upsert({ player_id: user.id, ...score }, {
     onConflict: 'track,player_id',
   });

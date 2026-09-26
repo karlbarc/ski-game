@@ -9,9 +9,16 @@ export function createRankingApi(client) {
       }
       if (user.id !== expectedPlayerId) throw new Error('Tu sesión cambió. Inicia una nueva bajada para publicar una marca.');
       const { error } = await client.functions.invoke('submit-score', {
-        body: { track, name: name.trim().slice(0, 12), timeSec, speedKmh },
+        body: { track, name: name.trim().slice(0, 20), timeSec, speedKmh },
       });
       if (error) throw new Error('No se pudo publicar la marca. Comprueba que el tiempo sea válido e inténtalo de nuevo.');
+    },
+    async isPlayerNameAvailable(name) {
+      const { data, error } = await client.rpc('is_player_name_available', {
+        candidate_name: name.trim().slice(0, 20),
+      });
+      if (error) throw error;
+      return data === true;
     },
     async fetchTop(track, limit = 10) {
       const { data, error } = await client.from('scores')

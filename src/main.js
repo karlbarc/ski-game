@@ -10,9 +10,9 @@ import {
 } from './race.js?v=1784480748';
 import { createControls } from './controls.js?v=1784480748';
 import { createHud } from './hud.js?v=1784480748';
-import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784480748';
+import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank, isPlayerNameAvailable } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
-import { authenticatedPlayerName } from './player-profile.js';
+import { authenticatedPlayerName, normalizePlayerName } from './player-profile.js';
 import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose, skiEyeOffset } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
 import { landingStrength, landingMotion } from './landing.js';
@@ -214,6 +214,7 @@ const authError = document.getElementById('auth-error');
 const mobileControls = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let authAutoAdvanceDone = false;
+let nameCheckToken = 0;
 
 function continueWithName(name) {
   sessionName = name;
@@ -231,6 +232,43 @@ function continueWithName(name) {
   document.getElementById('btn-touch').focus();
 }
 
+async function validateAndContinueName(name) {
+  const normalizedName = normalizePlayerName(name);
+  const errorElement = document.getElementById('name-error');
+  if (!normalizedName) {
+    errorElement.textContent = 'Escribe tu nombre de usuario para continuar.';
+    nameInput.setAttribute('aria-invalid', 'true');
+    nameInput.focus();
+    return false;
+  }
+
+  const checkToken = ++nameCheckToken;
+  const continueButton = document.getElementById('btn-continue');
+  continueButton.disabled = true;
+  errorElement.textContent = 'Comprobando disponibilidad…';
+  nameInput.removeAttribute('aria-invalid');
+  try {
+    const available = await isPlayerNameAvailable(normalizedName);
+    if (checkToken !== nameCheckToken) return false;
+    if (!available) {
+      errorElement.textContent = 'Ese nombre de usuario ya está en uso. Elige otro.';
+      nameInput.setAttribute('aria-invalid', 'true');
+      nameInput.focus();
+      return false;
+    }
+    continueWithName(normalizedName);
+    return true;
+  } catch {
+    if (checkToken !== nameCheckToken) return false;
+    errorElement.textContent = 'No pudimos comprobar el nombre de usuario. Revisa tu conexión e inténtalo de nuevo.';
+    nameInput.setAttribute('aria-invalid', 'true');
+    nameInput.focus();
+    return false;
+  } finally {
+    if (checkToken === nameCheckToken) continueButton.disabled = false;
+  }
+}
+
 auth.subscribe((user) => {
   googleButton.hidden = !!user;
   signoutButton.hidden = !user;
@@ -242,7 +280,7 @@ auth.subscribe((user) => {
   const startVisible = document.getElementById('start-screen').classList.contains('visible');
   if (user && !authAutoAdvanceDone && !sessionName && startVisible) {
     authAutoAdvanceDone = true;
-    continueWithName(authenticatedPlayerName(user, nameInput.value));
+    validateAndContinueName(authenticatedPlayerName(user, nameInput.value));
   }
 });
 auth.initialize().catch(() => {
@@ -269,16 +307,15 @@ function showNameForm() {
   document.getElementById('control-panel').hidden = true;
   nameInput.focus();
 }
-document.getElementById('player-form').addEventListener('submit', (event) => {
+nameInput.addEventListener('input', () => {
+  nameCheckToken += 1;
+  nameInput.removeAttribute('aria-invalid');
+  document.getElementById('name-error').textContent = '';
+  document.getElementById('btn-continue').disabled = false;
+});
+document.getElementById('player-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const name = nameInput.value.trim().slice(0, 12);
-  if (!name) {
-    document.getElementById('name-error').textContent = 'Escribe tu nombre para continuar.';
-    nameInput.setAttribute('aria-invalid', 'true');
-    nameInput.focus();
-    return;
-  }
-  continueWithName(name);
+  await validateAndContinueName(nameInput.value);
 });
 document.getElementById('btn-edit-name').addEventListener('click', showNameForm);
 
