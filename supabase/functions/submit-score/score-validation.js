@@ -17,7 +17,7 @@ export function validateScore(input) {
   if (!range) throw new Error('Pista no permitida.');
 
   const name = typeof input.name === 'string' ? input.name.trim() : '';
-  if (!name || name.length > 20) throw new Error('El nombre debe tener entre 1 y 20 caracteres.');
+  if (name.length < 2 || name.length > 20) throw new Error('El nombre debe tener entre 2 y 20 caracteres.');
 
   const timeCs = Math.round(Number(input.timeSec) * 100);
   if (!Number.isFinite(timeCs) || timeCs < range[0] || timeCs > range[1]) {

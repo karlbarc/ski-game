@@ -1,3 +1,4 @@
+export const MIN_PLAYER_NAME_LENGTH = 2;
 export const MAX_PLAYER_NAME_LENGTH = 20;
 
 export function normalizePlayerName(name) {

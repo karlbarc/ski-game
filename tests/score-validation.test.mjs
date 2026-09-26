@@ -20,6 +20,7 @@ test('unknown tracks and implausible values are rejected', () => {
   assert.throws(() => validateScore({ track: 'Verde', name: 'Snow', timeSec: 24.99, speedKmh: 80 }), /tiempo/);
   assert.throws(() => validateScore({ track: 'Verde', name: 'Snow', timeSec: 60, speedKmh: 201 }), /velocidad/);
   assert.throws(() => validateScore({ track: 'Verde', name: '', timeSec: 60, speedKmh: 80 }), /nombre/);
+  assert.throws(() => validateScore({ track: 'Verde', name: 'A', timeSec: 60, speedKmh: 80 }), /2 y 20 caracteres/);
   assert.throws(() => validateScore({ track: 'Verde', name: '123456789012345678901', timeSec: 60, speedKmh: 80 }), /20 caracteres/);
 });
 

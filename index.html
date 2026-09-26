@@ -166,6 +166,7 @@
   #submit-status { min-height: 1.4em; margin: 14px 0; color: #ffd166; font-size: .82rem !important; font-weight: 700; }
   #submit-status:empty { display: none; }
   #finish-rank { display: grid; place-items: center; width: 100%; min-height: 46px; margin: 14px 0; padding: 9px 14px; border: 1px solid rgba(255, 209, 102, .35); border-radius: 13px; background: rgba(255, 209, 102, .1); color: #ffe7a3; font-size: .92rem; font-weight: 800; line-height: 1.25; }
+  #btn-finish-google { width: 100%; margin-bottom: 12px; background: #fff; border-color: #d7dce0; color: #1f1f1f; }
   .finish-actions { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; gap: 10px; }
   #finish-screen .finish-actions button { min-width: 0; min-height: 54px; padding: 12px 14px; font-size: .94rem; }
   #finish-screen #btn-restart { background: #b8efdc; border-color: #d5faed; color: #102c32; }
@@ -468,15 +469,15 @@
     <div class="auth-panel">
       <button id="btn-google" type="button" disabled>Continuar con Google</button>
       <p id="auth-status" role="status">Comprobando sesión…</p>
-      <p id="guest-warning">⚠️ Si juegas como invitado, tus puntajes se guardarán solo en este dispositivo y no se publicarán en el ranking global.</p>
       <button id="btn-signout" type="button" class="text-button" hidden>Cerrar sesión</button>
       <p id="auth-error" role="alert"></p>
     </div>
     <label for="player-name">Escribe tu nombre de usuario</label>
-    <input id="player-name" name="nickname" type="text" maxlength="20" required autocomplete="nickname" enterkeyhint="next" placeholder="Tu nombre de usuario" aria-describedby="name-hint name-error">
-    <p id="name-hint">Hasta 20 caracteres. Debe ser único y se mostrará en el ranking.</p>
+    <input id="player-name" name="nickname" type="text" minlength="2" maxlength="20" required autocomplete="nickname" enterkeyhint="next" placeholder="Tu nombre de usuario" aria-describedby="name-hint name-error">
+    <p id="name-hint">Entre 2 y 20 caracteres. Debe ser único y se mostrará en el ranking.</p>
     <p id="name-error" role="alert"></p>
     <button id="btn-continue" type="submit" class="primary">Jugar como invitado →</button>
+    <p id="guest-warning">⚠️ Si juegas como invitado, tus puntajes se guardarán solo en este dispositivo y no se publicarán en el ranking global.</p>
   </form>
   <div id="control-panel" class="welcome-panel" hidden>
     <span class="eyebrow">PREPARA TU BAJADA</span>
@@ -529,6 +530,7 @@
     </div>
     <p id="submit-status" role="status"></p>
     <p id="finish-rank" role="status">Calculando tu posición…</p>
+    <button id="btn-finish-google" type="button" hidden>Iniciar con Google para publicar</button>
     <div class="finish-actions">
       <button id="btn-restart">Reintentar ↻</button>
       <button id="btn-finish-ranking">Ver ranking 🏆</button>

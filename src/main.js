@@ -12,7 +12,8 @@ import { createControls } from './controls.js?v=1784480748';
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank, isPlayerNameAvailable } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
-import { authenticatedPlayerName, normalizePlayerName } from './player-profile.js';
+import { authenticatedPlayerName, normalizePlayerName, MIN_PLAYER_NAME_LENGTH } from './player-profile.js';
+import { clearPendingScore, loadPendingScore, savePendingScore } from './pending-score.js';
 import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose, skiEyeOffset } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
 import { landingStrength, landingMotion } from './landing.js';
@@ -215,6 +216,8 @@ const mobileControls = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let authAutoAdvanceDone = false;
 let nameCheckToken = 0;
+let currentGuestResult = null;
+let pendingScoreRestoreStarted = false;
 
 function continueWithName(name) {
   sessionName = name;
@@ -235,11 +238,19 @@ function continueWithName(name) {
 async function validateAndContinueName(name) {
   const normalizedName = normalizePlayerName(name);
   const errorElement = document.getElementById('name-error');
-  if (!normalizedName) {
-    errorElement.textContent = 'Escribe tu nombre de usuario para continuar.';
+  if (normalizedName.length < MIN_PLAYER_NAME_LENGTH) {
+    errorElement.textContent = 'El nombre de usuario debe tener al menos 2 caracteres.';
     nameInput.setAttribute('aria-invalid', 'true');
     nameInput.focus();
     return false;
+  }
+
+  // Los invitados no publican su nombre en el ranking global, así que deben
+  // poder empezar incluso sin conexión. La unicidad solo aplica al nombre
+  // público de una cuenta de Google.
+  if (!auth.user()) {
+    continueWithName(normalizedName);
+    return true;
   }
 
   const checkToken = ++nameCheckToken;
@@ -274,10 +285,19 @@ auth.subscribe((user) => {
   signoutButton.hidden = !user;
   document.getElementById('auth-status').textContent = user
     ? `Sesión iniciada: ${user.email || 'cuenta de Google'}. Tu apodo es público; tu correo no.`
-    : 'Juega como invitado o inicia sesión con Google para publicar tus marcas.';
+    : 'Inicia sesión con Google para publicar tus marcas.';
   document.getElementById('guest-warning').hidden = !!user;
   document.getElementById('btn-continue').textContent = user ? 'Continuar →' : 'Jugar como invitado →';
   const startVisible = document.getElementById('start-screen').classList.contains('visible');
+  const pendingScore = user ? loadPendingScore(localStorage) : null;
+  if (user && pendingScore && !pendingScoreRestoreStarted) {
+    pendingScoreRestoreStarted = true;
+    authAutoAdvanceDone = true;
+    // La sesión puede emitirse mientras este módulo aún termina de inicializar
+    // el catálogo de pistas; diferir evita acceder a ese estado demasiado pronto.
+    queueMicrotask(() => restoreAndPublishPendingScore(pendingScore, user));
+    return;
+  }
   if (user && !authAutoAdvanceDone && !sessionName && startVisible) {
     authAutoAdvanceDone = true;
     validateAndContinueName(authenticatedPlayerName(user, nameInput.value));
@@ -342,6 +362,21 @@ function goToMenu() {
   snow.playMenu();
 }
 document.getElementById('btn-menu').addEventListener('click', goToMenu);
+document.getElementById('btn-finish-google').addEventListener('click', async () => {
+  if (!currentGuestResult) return;
+  const button = document.getElementById('btn-finish-google');
+  const status = document.getElementById('submit-status');
+  button.disabled = true;
+  status.textContent = 'Abriendo el acceso con Google…';
+  savePendingScore(localStorage, currentGuestResult);
+  savePlayerName(currentGuestResult.name);
+  try {
+    await auth.signIn();
+  } catch (error) {
+    status.textContent = error.message;
+    button.disabled = false;
+  }
+});
 document.getElementById('btn-finish-ranking').addEventListener('click', () => {
   started = false;
   snow.playMenu();
@@ -652,6 +687,9 @@ function restart() {
   steerSmooth = 0;
   runMaxSpeed = 0;
   crashSpeed = 0;
+  currentGuestResult = null;
+  document.getElementById('btn-finish-google').hidden = true;
+  document.getElementById('btn-finish-google').disabled = false;
   clearJumpPowder();
   hud.hideFinish();
   document.getElementById('pause-screen').classList.remove('visible');
@@ -708,7 +746,7 @@ async function sendScore(name, timeSec, speedKmh, resultToken) {
   const status = document.getElementById('submit-status');
   const rankStatus = document.getElementById('finish-rank');
   if (!racePlayerId || racePlayerId !== playerId()) {
-    status.textContent = 'Inicia sesión con Google antes de la bajada para publicar tu marca.';
+    status.textContent = 'Inicia sesión con Google para publicar este resultado.';
     rankStatus.textContent = 'Como invitado no tienes una posición global.';
     return;
   }
@@ -730,6 +768,62 @@ async function sendScore(name, timeSec, speedKmh, resultToken) {
   }
 }
 
+async function restoreAndPublishPendingScore(pendingScore, user) {
+  const data = TRACKS[pendingScore.trackKey];
+  if (!data) {
+    clearPendingScore(localStorage);
+    return;
+  }
+
+  sessionName = pendingScore.name;
+  savePlayerName(sessionName);
+  selectedTrack = pendingScore.trackKey;
+  selectedCategory = data.category;
+  loadTrack(data);
+  started = false;
+  currentGuestResult = null;
+  hud.hideStart();
+  document.getElementById('track-screen').classList.remove('visible');
+  document.getElementById('rank-screen').classList.remove('visible');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('finish-slalom').hidden = true;
+  document.getElementById('finish-track').textContent = `Pista ${data.name}`;
+  document.getElementById('btn-finish-google').hidden = true;
+  const best = loadBest(localStorage, pendingScore.track);
+  const bestSpeed = loadBestSpeed(localStorage, pendingScore.track);
+  hud.showFinish(
+    formatTime(pendingScore.timeSec),
+    best == null ? '—' : formatTime(best),
+    `${pendingScore.speedKmh} km/h · Récord ${bestSpeed == null ? '—' : `${bestSpeed} km/h`}`,
+    false,
+  );
+
+  const status = document.getElementById('submit-status');
+  const rankStatus = document.getElementById('finish-rank');
+  status.textContent = 'Validando y subiendo tu resultado…';
+  rankStatus.textContent = 'Calculando tu posición…';
+  try {
+    const available = await isPlayerNameAvailable(pendingScore.name);
+    if (!available) throw new Error('Ese nombre de usuario ya está en uso. Elige otro antes de publicar.');
+    await submitScore({
+      track: pendingScore.track,
+      name: pendingScore.name,
+      timeSec: pendingScore.timeSec,
+      speedKmh: pendingScore.speedKmh,
+      expectedPlayerId: user.id,
+    });
+    const mine = await fetchMyRank(pendingScore.track);
+    clearPendingScore(localStorage);
+    status.textContent = 'Tu resultado se publicó correctamente.';
+    rankStatus.textContent = mine
+      ? `Quedaste en el puesto #${mine.rank} del ranking de ${data.name}.`
+      : 'Tu marca se publicó, pero no pudimos calcular la posición.';
+  } catch (error) {
+    status.textContent = error.message;
+    rankStatus.textContent = 'Tu resultado sigue guardado en este dispositivo.';
+  }
+}
+
 function finish() {
   finishShown = true;
   snow.cheer();
@@ -744,6 +838,16 @@ function finish() {
   const recordName = trackRecordName(track.data);
   const isRecord = recordEligible ? saveBest(localStorage, recordName, time) : false;
   if (recordEligible) saveBestSpeed(localStorage, recordName, maxKmh);
+  const finishGoogleButton = document.getElementById('btn-finish-google');
+  currentGuestResult = recordEligible && !playerId() ? {
+    trackKey: selectedTrack,
+    track: recordName,
+    name: sessionName,
+    timeSec: time,
+    speedKmh: maxKmh,
+  } : null;
+  finishGoogleButton.hidden = !currentGuestResult;
+  finishGoogleButton.disabled = false;
   document.getElementById('submit-status').textContent = '';
   document.getElementById('finish-rank').textContent = recordEligible
     ? 'Calculando tu posición…'
