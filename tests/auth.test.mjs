@@ -77,31 +77,30 @@ test('a first Google login derives a short nickname from the profile', () => {
   assert.equal(authenticatedPlayerName({ email: 'skier@example.com', user_metadata: {} }), 'skier');
 });
 
-const score = { track: 'Verde', name: 'Snow', timeSec: 65, speedKmh: 85, expectedPlayerId: 'account-a' };
 function ranking(user) {
-  const writes = [];
+  const invocations = [];
   const client = {
     auth: { async getSession() { return { data: { session: user ? { user } : null } }; } },
-    from(table) { return { async upsert(body, options) { writes.push({ table, body, options }); return {}; } }; },
+    functions: { async invoke(name, options) { invocations.push({ name, options }); return {}; } },
   };
-  return { api: createRankingApi(client), writes };
+  return { api: createRankingApi(client), invocations };
 }
-test('guests and non-Google sessions cannot send scores', async () => {
-  for (const user of [null, { id: 'account-a', is_anonymous: true }, { id: 'account-a', app_metadata: { provider: 'email' } }]) {
-    const { api, writes } = ranking(user);
-    await assert.rejects(api.submitScore(score), /Google/);
-    assert.equal(writes.length, 0);
-  }
+const score = { track: 'Verde', name: 'Snow', timeSec: 65, speedKmh: 85, expectedPlayerId: 'account-a' };
+test('scores are submitted through the validating Edge Function', async () => {
+  const { api, invocations } = ranking({ id: 'account-a', app_metadata: { provider: 'google' } });
+  await api.submitScore(score);
+  assert.deepEqual(invocations, [{
+    name: 'submit-score',
+    options: { body: { track: 'Verde', name: 'Snow', timeSec: 65, speedKmh: 85 } },
+  }]);
 });
-test('account changes during a race cannot assign a score to the new account', async () => {
-  const { api, writes } = ranking({ id: 'account-b', app_metadata: { provider: 'google' } });
-  await assert.rejects(api.submitScore(score), /sesión cambió/);
-  assert.equal(writes.length, 0);
-});
-test('scores use the authenticated ID and never send device metadata or supplied IDs', async () => {
-  const { api, writes } = ranking({ id: 'account-a', app_metadata: { provider: 'google' } });
-  await api.submitScore({ ...score, player_id: 'victim', meta: { ua: 'private' } });
-  assert.deepEqual(writes[0].body, { player_id: 'account-a', track: 'Verde', name: 'Snow', time_cs: 6500, speed_kmh: 85 });
+test('guests and account changes cannot invoke score submission', async () => {
+  const guest = ranking(null);
+  await assert.rejects(guest.api.submitScore(score), /Google/);
+  assert.equal(guest.invocations.length, 0);
+  const changed = ranking({ id: 'account-b', app_metadata: { provider: 'google' } });
+  await assert.rejects(changed.api.submitScore(score), /sesión cambió/);
+  assert.equal(changed.invocations.length, 0);
 });
 test('guests can request their position without querying private identity', async () => {
   const { api } = ranking(null);

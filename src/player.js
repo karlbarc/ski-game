@@ -3,7 +3,7 @@ export const PARAMS = {
   friction: 0.25,      // rozamiento base de la nieve (m/s²)
   drag: 0.0035,        // resistencia del aire (·v²)
   carveBrake: 2.5,     // frenada extra por carving (·|sin(heading)|)
-  turnRate: 1.0,       // rad/s con steer a tope a turnReferenceSpeed
+  turnRate: 0.7,       // rad/s con steer a tope a turnReferenceSpeed
   turnReferenceSpeed: 15, // m/s: el giro crece proporcionalmente a la velocidad
   maxHeading: 1.1,     // rad
   brakeHeading: 1.45, // esquís casi atravesados respecto a la pendiente
@@ -14,10 +14,10 @@ export const PARAMS = {
   brakeDriftSpeed: 3.2, // m/s de desplazamiento lateral durante el derrape
   brakeDriftLimit: 1.2, // máximo de metros de derrape lateral por frenada
   brakeDriftEdgeMargin: 0.3, // margen que la deriva conserva hasta el borde
-  jumpLaunchFactor: 0.12,
-  minJumpVy: 2.0,
+  jumpLaunchFactor: 0.06,
+  minJumpVy: 1.2,
   rampLength: 6,       // la rampa sube desde o.s - rampLength hasta el labio en o.s
-  rampHeight: 1.3,
+  rampHeight: 1.0,
   rampHalfWidth: 3.5,
   maxSpeed: 45,
   crawlSpeed: 1.5,      // por debajo de esto, el freno de carving se desactiva (evita soft-lock)

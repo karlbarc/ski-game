@@ -8,13 +8,14 @@ function storage() {
   return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
 }
 
-test('the five tracks belong to two categories and sort by numeric difficulty', () => {
-  assert.equal(Object.keys(TRACKS).length, 5);
-  assert.equal(CATEGORIES.length, 2);
+test('the nine tracks belong to three categories and sort by numeric difficulty', () => {
+  assert.equal(Object.keys(TRACKS).length, 9);
+  assert.equal(CATEGORIES.length, 3);
   const shuffled = { negra: TRACKS.negra, roja: TRACKS.roja, alpina: TRACKS.alpina, azul: TRACKS.azul, verde: TRACKS.verde };
   assert.deepEqual(categoryTracks('obstaculos', shuffled).map(([key]) => key), ['verde', 'azul', 'roja', 'negra']);
   assert.deepEqual(categoryTracks('recreativas', shuffled).map(([key]) => key), ['alpina']);
-  assert.deepEqual(categoryTracks('slalom'), []);
+  assert.deepEqual(categoryTracks('slalom').map(([key]) => key),
+    ['slalomEscuela', 'slalom', 'slalomAvanzado', 'slalomExperto']);
   for (const track of Object.values(TRACKS)) assert.ok(Number.isFinite(track.difficultyLevel));
 });
 
@@ -22,6 +23,7 @@ test('only the first track of each category starts unlocked', () => {
   const saved = storage();
   assert.equal(trackProgress(saved, 'verde').unlocked, true);
   assert.equal(trackProgress(saved, 'alpina').unlocked, true);
+  assert.equal(trackProgress(saved, 'slalomEscuela').unlocked, true);
   assert.equal(trackProgress(saved, 'azul').unlocked, false);
   assert.equal(trackProgress(saved, 'negra').unlocked, false);
   assert.equal(trackProgress(saved, 'missing').unlocked, false);
@@ -49,4 +51,21 @@ test('invalid or unfinished times do not unlock the next track', () => {
     saved.setItem('ski-best-Verde', value);
     assert.equal(trackProgress(saved, 'azul').unlocked, false);
   }
+});
+
+test('slalom progression preserves the existing course and saved records', () => {
+  const saved = storage();
+  assert.equal(trackProgress(saved, 'slalom').unlocked, false);
+  assert.equal(trackProgress(saved, 'slalomAvanzado').unlocked, false);
+  assert.equal(trackProgress(saved, 'slalomExperto').unlocked, false);
+  saveBest(saved, 'Slalom Escuela', 80);
+  assert.equal(trackProgress(saved, 'slalom').unlocked, true);
+  const returning = storage();
+  saveBest(returning, 'Slalom Inicial', 95);
+  assert.equal(trackProgress(returning, 'slalom').completed, true);
+  assert.equal(trackProgress(returning, 'slalom').unlocked, true);
+  assert.equal(trackProgress(returning, 'slalomAvanzado').unlocked, true);
+  assert.equal(trackProgress(returning, 'slalomExperto').unlocked, false);
+  saveBest(returning, 'Slalom Avanzado', 90);
+  assert.equal(trackProgress(returning, 'slalomExperto').unlocked, true);
 });

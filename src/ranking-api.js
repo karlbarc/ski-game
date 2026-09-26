@@ -8,12 +8,10 @@ export function createRankingApi(client) {
         throw new Error('Inicia sesión con Google para publicar tu marca.');
       }
       if (user.id !== expectedPlayerId) throw new Error('Tu sesión cambió. Inicia una nueva bajada para publicar una marca.');
-      const { error } = await client.from('scores').upsert({
-        player_id: user.id, track, name: name.trim().slice(0, 12),
-        time_cs: Math.round(timeSec * 100),
-        speed_kmh: Math.min(200, Math.max(0, Math.round(speedKmh || 0))),
-      }, { onConflict: 'track,player_id' });
-      if (error) throw new Error('No se pudo publicar la marca. Comprueba tu conexión e inténtalo en otra bajada.');
+      const { error } = await client.functions.invoke('submit-score', {
+        body: { track, name: name.trim().slice(0, 12), timeSec, speedKmh },
+      });
+      if (error) throw new Error('No se pudo publicar la marca. Comprueba que el tiempo sea válido e inténtalo de nuevo.');
     },
     async fetchTop(track, limit = 10) {
       const { data, error } = await client.from('scores')

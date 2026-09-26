@@ -1,5 +1,18 @@
 import { PARAMS } from './player.js';
 
+// Los ojos quedan sobre los pies respecto al plano de nieve. Elevarlos solo
+// en el eje vertical retrasa la cámara al aumentar la pendiente y revela colas.
+export function skiEyeOffset(tangent, height) {
+  const horizontal = Math.hypot(tangent.x, tangent.z);
+  const length = Math.hypot(horizontal, tangent.y);
+  if (horizontal < 1e-6) return { x: 0, y: height, z: 0 };
+  return {
+    x: -tangent.x * tangent.y / (horizontal * length) * height,
+    y: horizontal / length * height,
+    z: -tangent.z * tangent.y / (horizontal * length) * height,
+  };
+}
+
 // Altura de la superficie visible, incluidos los hombros laterales de las rampas.
 // Al apoyar un esquí en el labio, prolongamos su plano para no hundir la punta.
 export function skiSurfaceHeight(track, s, lat, relief, supportRamp = null) {

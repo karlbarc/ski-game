@@ -12,6 +12,8 @@ export function createHud(doc = document) {
   let speedWidth = null;
   let progressText = null;
   let msgTimer = 0;
+  let messagePriority = 0;
+  let messageUntil = 0;
   return {
     setCountdown(cue) {
       const panel = el('race-start');
@@ -54,12 +56,22 @@ export function createHud(doc = document) {
         el('speed-value').textContent = text;
       }
     },
-    flash(text, ms = 1500) {
+    flash(text, ms = 1500, priority = 0) {
+      const now = performance.now();
+      if (now < messageUntil && priority < messagePriority) return;
+      messagePriority = priority;
+      messageUntil = now + ms;
       const m = el('message');
       m.textContent = text;
       m.classList.add('visible');
       clearTimeout(msgTimer);
       msgTimer = setTimeout(() => m.classList.remove('visible'), ms);
+    },
+    clearMessage() {
+      clearTimeout(msgTimer);
+      messagePriority = 0;
+      messageUntil = 0;
+      el('message').classList.remove('visible');
     },
     showFinish(timeText, bestText, speedText, isRecord) {
       el('finish-time').textContent = timeText;

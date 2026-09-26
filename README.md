@@ -9,12 +9,25 @@ Azul desbloquea Roja; completar Roja desbloquea Negra. **Recreativas** empieza c
 guardadas en este navegador cuentan como pistas completadas; las bajadas de
 prueba con autopilot o velocidad alterada no desbloquean pistas.
 
-Cinco pistas:
+Nueve pistas:
+
 - **Verde** (fácil)
 - **Azul** (media: más angosta, curvas cerradas y más obstáculos)
 - **Roja** (avanzada: 11 m de ancho, eses encadenadas, pendiente intermedia y 3 saltos)
 - **Negra** (difícil: 9 m de ancho, más empinada, obstáculos en el centro y 4 saltos)
 - **Alpina** (media: descenso largo de pendiente variable, palas, travesía y eses amplias; 18 m de ancho, rocas y 3 saltos opcionales)
+- **Inicial** (Slalom nivel 1: 10 banderines y giros suaves)
+- **Intermedia** (Slalom nivel 2: 12 banderines y pendiente variable)
+- **Avanzada** (Slalom nivel 3: 18 banderines más juntos y giros amplios)
+- **Experto** (Slalom nivel 4: 24 banderines muy juntos, mayor pendiente y cambios de pendiente continuos)
+
+En Slalom, rodea cada banderín por el exterior indicado por su flecha, dentro
+de la pista y en sentido de bajada. El resultado es el tiempo de bajada en
+segundos más las penalizaciones: tocar un palo suma 2 s; omitir una puerta,
+cruzarla por el lado incorrecto o en sentido contrario suma 50 s. Cada puerta
+recibe como máximo una sanción de 50 s, que sustituye un toque previo.
+El marcador muestra las penalizaciones y la siguiente dirección; al llegar
+se desglosan el tiempo y las sanciones. Los récords y el ranking usan el total.
 
 ## Jugar
 
@@ -61,3 +74,5 @@ URLs de retorno en Supabase. No se necesitan secretos en Vercel.
 ## Verificación e2e
 
 Query params de ayuda: `?autopilot=1` (steering automático) y `?timescale=4` (acelera el tiempo).
+
+El botón **📹** durante la carrera y la opción **Cámara** de la pausa permiten elegir entre primera persona (predeterminada) y vista trasera con un esquiador creado en Three.js. La elección se conserva en este navegador.

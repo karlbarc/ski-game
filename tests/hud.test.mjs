@@ -6,6 +6,23 @@ function element() {
   return { textContent: '', style: {}, classList: { add() {}, remove() {}, toggle() {} } };
 }
 
+test('contact warning survives ordinary messages and restart clears its priority', () => {
+  const message = element();
+  const hud = createHud({ getElementById: () => message });
+  try {
+    hud.flash('¡Tocaste la bandera! · +2 s', 2500, 1);
+    hud.flash('¡Puerta correcta!', 800);
+    assert.equal(message.textContent, '¡Tocaste la bandera! · +2 s');
+    hud.flash('¡Buen aterrizaje!', 900);
+    assert.equal(message.textContent, '¡Tocaste la bandera! · +2 s');
+    hud.clearMessage();
+    hud.flash('¡Puerta correcta!', 800);
+    assert.equal(message.textContent, '¡Puerta correcta!');
+  } finally {
+    hud.clearMessage();
+  }
+});
+
 test('limita las escrituras dinámicas del HUD a diez por segundo', () => {
   const nodes = new Map([
     ['timer-text', element()], ['progress', element()],

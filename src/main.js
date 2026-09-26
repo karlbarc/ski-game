@@ -1,7 +1,8 @@
 import * as THREE from 'three';
+import { createSkier, poseSkier } from './skier.js';
 import { splitStaticInstances } from './render-batches.js';
 import { buildTrack, mulberry32 } from './track.js?v=1784480748';
-import { TRACKS, CATEGORIES, categoryTracks, trackProgress } from './track-catalog.js';
+import { TRACKS, CATEGORIES, categoryTracks, trackProgress, trackRecordName } from './track-catalog.js';
 import { createPlayerState, stepPlayer, recoverPlayer, turnRateAtSpeed, playerViewHeading, PARAMS } from './player.js?v=1784480748';
 import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
@@ -12,10 +13,11 @@ import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
 import { authenticatedPlayerName } from './player-profile.js';
-import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose } from './ski-surface.js';
+import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose, skiEyeOffset } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
 import { landingStrength, landingMotion } from './landing.js';
 import { createSnowSound } from './audio.js?v=1789743651';
+import { createSlalom, stepSlalom, slalomResult, slalomNotice, slalomPoleOffsets, SLALOM_FLAG_WIDTH } from './slalom.js';
 
 const query = new URLSearchParams(location.search);
 const AUTOPILOT = query.get('autopilot') === '1';
@@ -93,8 +95,42 @@ sun.shadow.normalBias = 0.35;
 scene.add(sun);
 scene.add(sun.target);
 
+const SKI_TAIL = 0.85;
+const SKI_TIP = 1.60;
+const SKI_LENGTH = SKI_TAIL + SKI_TIP;
 const camera = new THREE.PerspectiveCamera(70, viewportWidth / viewportHeight, 0.1, 3000);
 const skis = makeSkis();
+const skier = createSkier();
+skier.scale.setScalar(0.8);
+// Conserva las botas centradas sobre los esquís, que mantienen su separación.
+for (const limb of skier.userData.rig.limbs) limb.boot.position.x /= 0.8;
+scene.add(skier);
+let cameraMode = 'first';
+try { cameraMode = localStorage.getItem('ski-camera') === 'rear' ? 'rear' : 'first'; } catch {}
+let rearCameraOffset = null;
+const cameraButton = document.getElementById('btn-camera');
+function syncCameraControls() {
+  for (const select of document.querySelectorAll('[data-camera-mode]')) select.value = cameraMode;
+  const rear = cameraMode === 'rear';
+  cameraButton.setAttribute('aria-pressed', String(rear));
+  cameraButton.title = rear ? 'Cambiar a primera persona' : 'Cambiar a cámara trasera';
+}
+function setCameraMode(mode) {
+  cameraMode = mode === 'rear' ? 'rear' : 'first';
+  rearCameraOffset = null;
+  skiVisualPose = null;
+  try { localStorage.setItem('ski-camera', cameraMode); } catch {}
+  syncCameraControls();
+}
+for (const select of document.querySelectorAll('[data-camera-mode]')) {
+  select.addEventListener('change', () => setCameraMode(select.value));
+}
+cameraButton.addEventListener('click', () => setCameraMode(cameraMode === 'rear' ? 'first' : 'rear'));
+// Tocar la cámara no debe iniciar un gesto de giro o frenado en móvil.
+for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+  cameraButton.addEventListener(type, event => event.stopPropagation(), { passive: true });
+}
+syncCameraControls();
 let skiVisualPose = null;
 let landingAge = 1;
 let landingImpact = 0;
@@ -130,6 +166,7 @@ function loadTrack(data) {
   worldGroup.add(makeTrees(track));
   worldGroup.add(makeRocks(track));
   worldGroup.add(makeRamps(track));
+  worldGroup.add(makeSlalomFlags(track));
   startGate = makeStartGate(track, START_S);
   worldGroup.add(startGate);
   worldGroup.add(makeGate(track, FINISH_S, 0x3050c0));
@@ -144,6 +181,7 @@ function loadTrack(data) {
 
 let player = createPlayerState();
 let race = createRace(START_S, FINISH_S);
+let slalomState = createSlalom();
 let started = false;
 let finishShown = false;
 let finishResultToken = 0;
@@ -225,7 +263,7 @@ signoutButton.addEventListener('click', async () => {
   catch (error) { authError.textContent = error.message; }
   finally { signoutButton.disabled = false; }
 });
-document.getElementById('btn-back-controls').textContent = mobileControls ? '‹ Nombre y controles' : '‹ Cambiar nombre';
+document.getElementById('btn-back-controls').textContent = '‹ Inicio';
 function showNameForm() {
   document.getElementById('player-form').hidden = false;
   document.getElementById('control-panel').hidden = true;
@@ -339,7 +377,7 @@ async function showRanking() {
   list.className = 'rank-selector';
 
   const rankedTracks = Object.entries(TRACKS)
-    .map(([key, data]) => ({ key, data, best: loadBest(localStorage, data.name) }));
+    .map(([key, data]) => ({ key, data, best: loadBest(localStorage, trackRecordName(data)) }));
 
   list.innerHTML = rankedTracks.map(({ key, data, best }) => `
     <button class="rank-choice" data-track="${key}" style="--accent:${data.accent}">
@@ -357,7 +395,7 @@ async function showRanking() {
     el.addEventListener('click', () => showTrackRanking(el.dataset.track));
   }
   for (const { key, data, best } of rankedTracks) {
-    Promise.all([fetchTop(data.name, 1), fetchMyRank(data.name)])
+    Promise.all([fetchTop(trackRecordName(data), 1), fetchMyRank(trackRecordName(data))])
       .then(([rows, mine]) => {
         const position = list.querySelector(`.rank-position[data-track="${key}"]`);
         const globalTime = list.querySelector(`.rank-global-time[data-track="${key}"]`);
@@ -391,7 +429,7 @@ async function showTrackRanking(key) {
   const viewToken = ++rankViewToken;
   const data = TRACKS[key];
   const list = document.getElementById('rank-list');
-  const best = loadBest(localStorage, data.name);
+  const best = loadBest(localStorage, trackRecordName(data));
   document.getElementById('rank-title').textContent = `${data.emoji} ${data.name}`;
   document.getElementById('rank-subtitle').textContent = `Tu mejor tiempo: ${best == null ? '—' : formatTime(best)}`;
   document.getElementById('btn-back-tracks').textContent = '‹ Elegir otra pista';
@@ -399,7 +437,8 @@ async function showTrackRanking(key) {
   list.innerHTML = '<p class="rank-empty">Cargando…</p>';
   try {
     const me = playerId();
-    const [rows, mine] = await Promise.all([fetchTop(data.name, 50), fetchMyRank(data.name)]);
+    const recordName = trackRecordName(data);
+    const [rows, mine] = await Promise.all([fetchTop(recordName, 50), fetchMyRank(recordName)]);
     if (viewToken !== rankViewToken) return;
     list.innerHTML = '<div class="rank-track"><h2>Clasificación global<small>Mejores tiempos</small></h2>'
       + rankRowsHtml(rows, mine, me) + '</div>';
@@ -465,7 +504,7 @@ function buildTrackMenu() {
   document.getElementById('category-title').textContent = category.name;
   for (const [key, data] of categoryTracks(selectedCategory)) {
     const m = trackMeta(key);
-    const best = loadBest(localStorage, data.name);
+    const best = loadBest(localStorage, trackRecordName(data));
     const card = document.createElement('button');
     const progress = trackProgress(localStorage, key);
     card.className = `track-card${progress.unlocked ? '' : ' locked'}`;
@@ -479,7 +518,7 @@ function buildTrackMenu() {
       </span>
       <span class="track-title">${data.name}</span>
       <span class="track-description${data.description ? '' : ' track-description-spacer'}">${data.description || ''}</span>
-      <span class="track-stats">${m.length} m · ${m.slope}% pendiente<br>${m.obstacles} obstáculos · ${m.jumps} saltos</span>
+      <span class="track-stats">${m.length} m · ${m.slope}% pendiente<br>${data.gates ? `${data.gates.length} puertas · Tiempo + penalizaciones` : `${m.obstacles} obstáculos · ${m.jumps} saltos`}</span>
       <span class="track-best"><small>Tu mejor tiempo</small><strong>${best == null ? 'Sin marca todavía' : formatTime(best)}</strong></span>
       <span class="track-status">${progress.unlocked ? (progress.completed ? '✓ Completada' : 'Disponible') : `🔒 Completa ${progress.previous.name} para desbloquear`}</span>
       <span class="track-play"><span>${progress.unlocked ? 'Bajar esta pista' : 'Bloqueada'}</span><span class="track-play-arrow" aria-hidden="true">${progress.unlocked ? '→' : '🔒'}</span></span>`;
@@ -554,11 +593,13 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function restart() {
+  hud.clearMessage();
   finishResultToken += 1;
   racePlayerId = playerId();
   landingAge = 1;
   landingImpact = 0;
   skiVisualPose = null;
+  rearCameraOffset = null;
   player = createPlayerState();
   player.s = START_S - 2.8;
   startSequence = createStartSequence();
@@ -567,6 +608,8 @@ function restart() {
   if (started) snow.start();
   if (startGate) startGate.userData.arm.rotation.y = 0;
   race = createRace(START_S, FINISH_S);
+  slalomState = createSlalom(track?.gates);
+  updateSlalomHud();
   finishShown = false;
   paused = false;
   steerSmooth = 0;
@@ -617,6 +660,8 @@ function autopilotSteer() {
       break;
     }
   }
+  const nextGate = slalomState.gates.find((g) => g.s > player.s);
+  if (nextGate) latTarget = nextGate.lat + nextGate.passSide * 1.8;
   const headingTarget = Math.max(-0.5, Math.min(0.5, 0.06 * (latTarget - player.lat)));
   const desiredTurnRate = steerFF + (headingTarget - player.heading) * 3;
   return turnRate > 0 ? Math.max(-1, Math.min(1, desiredTurnRate / turnRate)) : 0;
@@ -630,11 +675,12 @@ async function sendScore(name, timeSec, speedKmh, resultToken) {
     rankStatus.textContent = 'Como invitado no tienes una posición global.';
     return;
   }
-  status.textContent = 'Subiendo al ranking…';
+  status.textContent = 'Validando y subiendo al ranking…';
   rankStatus.textContent = 'Calculando tu posición…';
   try {
-    await submitScore({ track: track.data.name, name, timeSec, speedKmh, expectedPlayerId: racePlayerId });
-    const mine = await fetchMyRank(track.data.name);
+    const recordName = trackRecordName(track.data);
+    await submitScore({ track: recordName, name, timeSec, speedKmh, expectedPlayerId: racePlayerId });
+    const mine = await fetchMyRank(recordName);
     if (resultToken !== finishResultToken) return;
     status.textContent = '';
     rankStatus.textContent = mine
@@ -650,19 +696,24 @@ async function sendScore(name, timeSec, speedKmh, resultToken) {
 function finish() {
   finishShown = true;
   snow.cheer();
-  const time = race.elapsed;
+  const result = slalomResult(slalomState, race.elapsed);
+  const time = result.total;
+  const breakdown = document.getElementById('finish-slalom');
+  breakdown.hidden = !track.gates.length;
+  breakdown.textContent = `Bajada: ${race.elapsed.toFixed(2)} s + penalización: ${result.penalty} s = ${time.toFixed(2)} s. Toques: ${result.touches} × 2 s · Puertas incorrectas u omitidas: ${result.missed} × 50 s.`;
   const maxKmh = Math.round(runMaxSpeed * 3.6);
   const recordEligible = TIMESCALE === 1 && !AUTOPILOT;
   const resultToken = ++finishResultToken;
-  const isRecord = recordEligible ? saveBest(localStorage, track.data.name, time) : false;
-  if (recordEligible) saveBestSpeed(localStorage, track.data.name, maxKmh);
+  const recordName = trackRecordName(track.data);
+  const isRecord = recordEligible ? saveBest(localStorage, recordName, time) : false;
+  if (recordEligible) saveBestSpeed(localStorage, recordName, maxKmh);
   document.getElementById('submit-status').textContent = '';
   document.getElementById('finish-rank').textContent = recordEligible
     ? 'Calculando tu posición…'
     : 'Esta bajada de prueba no afecta al ranking.';
   if (recordEligible && sessionName) sendScore(sessionName, time, maxKmh, resultToken);
-  const best = loadBest(localStorage, track.data.name);
-  const bestSpeed = loadBestSpeed(localStorage, track.data.name);
+  const best = loadBest(localStorage, recordName);
+  const bestSpeed = loadBestSpeed(localStorage, recordName);
   document.getElementById('finish-track').textContent = `Pista ${track.data.name}`;
   hud.showFinish(
     formatTime(time),
@@ -678,15 +729,26 @@ function updateCamera(visualDt) {
   const f = track.frameAt(player.s);
   const eye = player.fallen ? 0.6 : 1.7;
   const surfaceHeight = snowRelief(player.s, player.lat, track.width);
-  const pos = track.toWorld(player.s, player.lat, surfaceHeight + player.height + eye - landing.dip);
+  const eyeOffset = player.fallen ? { x: 0, y: eye, z: 0 }
+    : skiEyeOffset(f.tan, eye - landing.dip);
+  const pos = track.toWorld(player.s, player.lat, surfaceHeight + player.height);
+  pos.x += eyeOffset.x;
+  pos.y += eyeOffset.y;
+  pos.z += eyeOffset.z;
+  // Mirada más orientada a la pista; el giro se transmite con un balanceo lateral.
+  const firstPerson = cameraMode === 'first';
+  if (firstPerson && !player.fallen && player.brakeReturnHeading == null) {
+    pos.addScaledVector(f.side, steerSmooth * 0.35);
+  }
   camera.position.copy(pos);
-  const viewHeading = playerViewHeading(player);
+  const viewHeading = playerViewHeading(player) * (firstPerson && !player.fallen ? 0.4 : 1);
   const dir = f.tan.clone().multiplyScalar(Math.cos(viewHeading))
     .addScaledVector(f.side, Math.sin(viewHeading));
   camera.lookAt(pos.clone().add(dir));
   if (!player.fallen) camera.rotateX((player.airborne ? -0.045 : -0.12) - landing.pitch);
-  camera.rotateZ(player.fallen ? 0.5 : player.brakeReturnHeading != null ? 0 : steerSmooth * 0.16);
-  const fov = Math.min(98, 70 + player.speed * 0.9 + (player.airborne ? 4 : 0));
+  camera.rotateZ(player.fallen ? 0.5 : player.brakeReturnHeading != null ? 0 : steerSmooth * (firstPerson ? 0.045 : 0.16));
+  const fov = cameraMode === 'rear' ? 72 + Math.min(22, player.speed * 0.65)
+    : Math.min(98, 70 + player.speed * 0.9 + (player.airborne ? 4 : 0));
   if (Math.abs(fov - camera.fov) > 0.1) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
@@ -699,7 +761,7 @@ function updateCamera(visualDt) {
   sun.position.copy(focus).add(SUN_OFFSET);
 
   skis.visible = !player.fallen;
-  const lengthScale = skiLengthScale(camera.fov);
+  const lengthScale = cameraMode === 'rear' ? 1 : skiLengthScale(camera.fov);
   skis.scale.z = lengthScale;
   const supportRamp = findSkiSupportRamp(track, player);
   const cos = Math.cos(player.heading), sin = Math.sin(player.heading);
@@ -711,12 +773,15 @@ function updateCamera(visualDt) {
   };
   // Ajustar el plano desde la cola hasta la punta permite subir a una rampa
   // antes de que los pies lleguen a ella. En el labio conserva su inclinación.
-  const rearDistance = 0.5 - 0.45 * lengthScale;
-  const frontDistance = 0.5 + 1.60 * lengthScale;
+  const rearDistance = 0.5 - SKI_TAIL * lengthScale;
+  const frontDistance = 0.5 + SKI_TIP * lengthScale;
   const rear = surfacePoint(rearDistance);
   const front = surfacePoint(frontDistance);
   const forward = front.clone().sub(rear).normalize();
-  const edgeAngle = steerSmooth * (0.6 + 0.16);
+  poseSkier(skier, { steer: steerSmooth, airborne: player.airborne,
+    fallen: player.fallen, dip: landing.dip });
+  const edgeAngles = skier.userData.rig.limbs.map(limb => limb.boot.rotation.z);
+  const edgeAngle = Math.max(...edgeAngles.map(Math.abs));
   const contactHeight = 0.022 + Math.abs(Math.sin(edgeAngle)) * 0.103;
   const origin = rear.clone().lerp(front, (0.5 - rearDistance) / (frontDistance - rearDistance));
   // Mantiene toda la base por encima de las pequeñas irregularidades de nieve.
@@ -754,7 +819,7 @@ function updateCamera(visualDt) {
     let contactLift = 0;
     for (let i = 0; i <= 4; i++) {
       const t = i / 4;
-      const localZ = (0.45 - t * 2.05) * lengthScale;
+      const localZ = (SKI_TAIL - t * SKI_LENGTH) * lengthScale;
       const base = new THREE.Vector3(0, 0, localZ).applyQuaternion(skis.quaternion).add(skis.position);
       const ground = surfacePoint(THREE.MathUtils.lerp(rearDistance, frontDistance, t));
       contactLift = Math.max(contactLift, ground.y + contactHeight - base.y);
@@ -762,9 +827,32 @@ function updateCamera(visualDt) {
     skis.position.y += contactLift;
     skiVisualPose.lift += contactLift;
   }
-  for (const ski of skis.userData.skis) {
-    ski.rotation.z = edgeAngle;
+  for (const [index, ski] of skis.userData.skis.entries()) {
+    ski.rotation.z = edgeAngles[index];
     ski.scale.y = 1 - landing.flex; // compresión breve del rocker al tocar nieve
+  }
+
+  skier.visible = cameraMode === 'rear';
+  skier.position.copy(skis.position);
+  skier.quaternion.copy(skis.quaternion);
+  if (cameraMode === 'rear') {
+    // Seguir la pista evita que un derrape o una caída hagan girar la cámara.
+    // Suavizamos el desplazamiento relativo, sin retrasar al jugador a alta velocidad.
+    // Cercana a la nieve para reforzar el flujo del terreno; se aleja
+    // suavemente al acelerar, conservando al personaje completo en pantalla.
+    const followDistance = 1.6 + Math.min(0.8, player.speed * 0.025);
+    const behindS = Math.max(0, player.s - followDistance);
+    const behind = track.toWorld(behindS, player.lat,
+      skiSurfaceHeight(track, behindS, player.lat, snowRelief) + player.height + 2.0);
+    const targetOffset = behind.clone().sub(skis.position);
+    if (!rearCameraOffset) rearCameraOffset = targetOffset.clone();
+    rearCameraOffset.lerp(targetOffset, -Math.expm1(-visualDt / 0.16));
+    camera.position.copy(skis.position).add(rearCameraOffset);
+    camera.position.y = Math.max(camera.position.y, behind.y);
+    const look = skis.position.clone().addScaledVector(f.tan, 4);
+    look.y += 1;
+    camera.up.set(0, 1, 0);
+    camera.lookAt(look);
   }
 
   // Sombra de contacto ceñida a cada base, proyectada sobre la superficie real.
@@ -777,7 +865,7 @@ function updateCamera(visualDt) {
       const centerX = skis.userData.skis[k].position.x;
       for (let row = 0; row <= 16; row++) {
         const t = row / 16;
-        const distance = 0.5 + (-0.45 + t * 2.05) * lengthScale;
+        const distance = 0.5 + (-SKI_TAIL + t * SKI_LENGTH) * lengthScale;
         for (let side = 0; side < 2; side++) {
           const point = surfacePoint(distance, centerX + (side ? 0.12 : -0.12), false);
           vertices.setXYZ(row * 2 + side, point.x, point.y + 0.012, point.z);
@@ -815,6 +903,13 @@ function tick(now) {
     steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * (3 + brake * 12));
     const prev = player;
     player = stepPlayer(player, steerSmooth, dt, track, PARAMS, brake);
+    if (track.gates.length && race.status !== 'ready') {
+      const before = slalomState;
+      slalomState = stepSlalom(slalomState, prev, player, track.width, player.s >= FINISH_S);
+      const notice = slalomNotice(before, slalomState);
+      if (notice) hud.flash(notice.text, notice.duration, notice.priority);
+      updateSlalomHud();
+    }
     if (!player.fallen) {
       const prevStatus = race.status;
       race = updateRace(race, player.s, now);
@@ -856,17 +951,20 @@ function tick(now) {
     if (race.status === 'finished' && !finishShown) finish();
   }
 
-  // Saludos asimétricos y balanceo leve, con los pies apoyados en la nieve.
-  const tSec = now / 1000;
+  // El público espera inmóvil y empieza a saludar al cruzar la meta.
   for (const c of crowd) {
-    const wave = Math.sin(tSec * 3.2 * c.energy + c.phase);
-    for (let i = 0; i < c.arms.length; i++) {
-      const arm = c.arms[i];
-      const raised = Math.abs(arm.userData.restAngle) > 1;
-      arm.rotation.z = arm.userData.restAngle + (raised ? 0.22 : 0.06) * Math.sin(tSec * 3.2 * c.energy + c.phase + i);
-      arm.rotation.x = (raised ? 0.12 : 0.035) * wave;
+    if (race.status !== 'finished') c.cheerTime = 0;
+    else if (!paused) c.cheerTime += Math.min(realDt, 0.05);
+    const blend = Math.min(1, c.cheerTime / 0.65);
+    const wave = Math.sin(c.cheerTime * 3.2 * c.energy + c.phase);
+    for (const arm of c.arms) {
+      const { side, elbow, cheering } = arm.userData;
+      arm.rotation.z = side * (0.10 + blend * (cheering ? 0.48 : 0.10));
+      arm.rotation.x = blend * (cheering ? -0.30 : -0.12);
+      elbow.rotation.x = -0.18 + blend * (cheering ? -1.95 + 0.18 * wave : -0.35);
+      elbow.rotation.z = cheering ? blend * 0.12 * wave : 0;
     }
-    c.fig.rotation.z = wave * 0.012;
+    c.fig.rotation.z = blend * wave * 0.012;
   }
 
   updateCamera(started && !paused && race.status !== 'finished' ? dt : 0);
@@ -874,7 +972,7 @@ function tick(now) {
   const gliding = started && !paused && race.status !== 'finished'
     && !player.airborne && !player.fallen;
   snow.update(gliding ? player.speed : 0, steerSmooth, gliding);
-  hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(race.elapsed), now);
+  hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(slalomResult(slalomState, race.elapsed).total), now);
   hud.setSpeed((player.fallen ? crashSpeed : player.speed) * 3.6, now);
   hud.setProgress(player.s, track.length, now);
   renderer.render(scene, camera);
@@ -896,7 +994,7 @@ function resizeRenderer() {
 window.addEventListener('resize', resizeRenderer);
 window.visualViewport?.addEventListener('resize', resizeRenderer);
 
-window.__game = { state: () => ({ player, race, paused, startSequence }), trackLength: 0 };
+window.__game = { state: () => ({ player, race, paused, cameraMode, startSequence, slalom: slalomState, result: slalomResult(slalomState, race.elapsed) }), trackLength: 0 };
 loadTrack(TRACKS[selectedTrack]);
 
 // Los runs de verificación (autopilot) saltan los menús y arrancan directos.
@@ -908,6 +1006,52 @@ if (AUTOPILOT) {
 }
 
 // ---------- construcción de la escena ----------
+
+function updateSlalomHud() {
+  const panel = document.getElementById('slalom-status');
+  panel.hidden = !slalomState.gates.length;
+  if (panel.hidden) return;
+  const result = slalomResult(slalomState);
+  const next = slalomState.gates.find((g) => g.status === 'pending');
+  const text = `${result.completed}/${slalomState.gates.length} puertas · +${result.penalty} s${next ? ` · ${next.passSide > 0 ? '← Izquierda' : 'Derecha →'} por fuera` : ''}`;
+  if (panel.textContent !== text) panel.textContent = text;
+}
+
+function makeSlalomFlags(track) {
+  const group = new THREE.Group();
+  for (const gate of track.gates) {
+    const marker = new THREE.Group();
+    const color = gate.passSide > 0 ? '#e44336' : '#247dde';
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+    for (const poleLat of slalomPoleOffsets(gate)) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 2.3, 8), material);
+      pole.position.set(gate.lat - poleLat, 1.15, 0);
+      pole.castShadow = true;
+      marker.add(pole);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 160;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = color; ctx.fillRect(0, 0, 256, 160);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 86px system-ui';
+    ctx.fillText(`${gate.passSide > 0 ? '←' : '→'} ${gate.id}`, 128, 78);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(SLALOM_FLAG_WIDTH, 0.78),
+      new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide, roughness: 0.9 }));
+    // La tela queda hacia el centro; la flecha apunta al exterior libre.
+    flag.position.set(gate.passSide * SLALOM_FLAG_WIDTH / 2, 1.55, 0);
+    marker.add(flag);
+    const frame = track.frameAt(gate.s);
+    const right = frame.side.clone().negate();
+    const up = new THREE.Vector3().crossVectors(right, frame.tan).normalize();
+    marker.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, frame.tan.clone().negate()));
+    marker.position.copy(track.toWorld(gate.s, gate.lat, snowRelief(gate.s, gate.lat, track.width)));
+    group.add(marker);
+  }
+  return group;
+}
 
 // Cúpula de cielo con degradé: pálido en el horizonte, azul intenso en el cenit.
 function makeSky(center) {
@@ -1595,7 +1739,7 @@ function makeSkiGeometry() {
     if (t < 0.035) width *= Math.sqrt(Math.max(0, 1 - ((0.035 - t) / 0.035) ** 2));
     for (let j = 0; j <= section.length; j++) {
       const [x, h] = section[j % section.length];
-      positions.push(x * width, y + h, 0.45 - t * 2.05);
+      positions.push(x * width, y + h, SKI_TAIL - t * SKI_LENGTH);
       uvs.push((x + 1) / 2, t);
     }
   }
@@ -1978,6 +2122,7 @@ function makeCrowd(track, finishS) {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
   const sphere = new THREE.SphereGeometry(1, LOW_END ? 10 : 16, LOW_END ? 8 : 12);
   const capsule = new THREE.CapsuleGeometry(1, 1, 4, LOW_END ? 8 : 12);
+  const sleeve = new THREE.CylinderGeometry(1, 0.78, 1, LOW_END ? 8 : 12);
   const up = new THREE.Vector3(0, 1, 0);
   // Todas las piezas usan color de vértice; el sombreado sigue siendo suave.
   const builder = () => {
@@ -2062,16 +2207,24 @@ function makeCrowd(track, finishS) {
     for (const armSide of [-1, 1]) {
       const shoulder = new THREE.Group();
       shoulder.position.set(armSide * 0.23, 1.34, 0);
-      const arm = builder();
-      arm.segment([0, 0, 0], [armSide * 0.035, -0.27, 0], 0.09, jacket);
-      arm.add(sphere, [armSide * 0.035, -0.26, 0], [0.086, 0.09, 0.085], jacket);
-      arm.segment([armSide * 0.035, -0.26, 0], [armSide * 0.02, -0.48, 0.13], 0.075, jacket);
-      arm.add(sphere, [armSide * 0.02, -0.48, 0.13], [0.075, 0.045, 0.075], trim);
-      arm.add(sphere, [armSide * 0.02, -0.545, 0.15], [0.065, 0.083, 0.055], 0x29323b);
-      arm.add(sphere, [-armSide * 0.033, -0.53, 0.17], [0.03, 0.047, 0.032], 0x29323b);
-      shoulder.add(arm.finish());
-      shoulder.userData.restAngle = armSide * (i % 3 === 0 || armSide === side ? 2.45 : 0.35);
-      shoulder.rotation.z = shoulder.userData.restAngle;
+      // Mangas con perfil cónico y codo independiente bajo el hombro.
+      const upper = builder();
+      upper.add(sphere, [0, -0.025, 0], [0.077, 0.080, 0.075], jacket);
+      upper.add(sleeve, [0, -0.155, 0], [0.078, 0.27, 0.073], jacket);
+      upper.add(sphere, [0, -0.29, 0], [0.061, 0.058, 0.058], jacket);
+      shoulder.add(upper.finish());
+      const elbow = new THREE.Group();
+      elbow.position.set(0, -0.29, 0);
+      const forearm = builder();
+      forearm.add(sleeve, [0, -0.115, 0], [0.062, 0.23, 0.059], jacket);
+      forearm.add(sleeve, [0, -0.235, 0], [0.052, 0.035, 0.050], trim);
+      forearm.add(sphere, [0, -0.295, 0.008], [0.047, 0.069, 0.033], 0x29323b);
+      forearm.add(sphere, [-armSide * 0.037, -0.276, 0.026], [0.022, 0.036, 0.024], 0x29323b);
+      elbow.add(forearm.finish());
+      elbow.rotation.x = -0.18;
+      shoulder.add(elbow);
+      shoulder.userData = { side: armSide, elbow, cheering: i % 3 === 0 || armSide === side };
+      shoulder.rotation.z = armSide * 0.10;
       fig.add(shoulder);
       arms.push(shoulder);
     }
@@ -2082,9 +2235,9 @@ function makeCrowd(track, finishS) {
     const facing = track.toWorld(finishS - 5, 0, 0);
     fig.lookAt(facing.x, w.y, facing.z);
     group.add(fig);
-    crowd.push({ fig, arms, baseY: w.y, phase: rng() * Math.PI * 2, energy: 0.7 + rng() * 0.6 });
+    crowd.push({ fig, arms, cheerTime: 0, baseY: w.y, phase: rng() * Math.PI * 2, energy: 0.7 + rng() * 0.6 });
   }
-  sphere.dispose(); capsule.dispose();
+  sphere.dispose(); capsule.dispose(); sleeve.dispose();
   return group;
 }
 

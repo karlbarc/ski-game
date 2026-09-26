@@ -1,21 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose } from '../src/ski-surface.js';
+import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose, skiEyeOffset } from '../src/ski-surface.js';
+import { Vector3, PerspectiveCamera } from 'three';
+import { PARAMS } from '../src/player.js';
 const ramp = { type: 'jump', s: 30, lat: 0 };
 const track = { width: 16, obstacles: [ramp] };
 const flatSnow = () => 0;
+
+test('steep slopes keep the ski tails below the frame and the tips consistently framed', () => {
+  for (const fov of [70, 85, 98]) {
+    let referenceTipY;
+    for (const degrees of [0, 8, 20, 25, 32, 40]) {
+      const angle = degrees * Math.PI / 180;
+      const tangent = new Vector3(0, -Math.sin(angle), -Math.cos(angle));
+      const eye = skiEyeOffset(tangent, 1.7);
+      const camera = new PerspectiveCamera(fov, 16 / 9, 0.1, 3000);
+      camera.position.set(eye.x, eye.y, eye.z);
+      camera.lookAt(camera.position.clone().add(tangent));
+      camera.rotateX(-0.12);
+      camera.updateMatrixWorld();
+      const scale = skiLengthScale(fov);
+      const tail = tangent.clone().multiplyScalar(0.5 - 0.45 * scale).project(camera);
+      const tip = tangent.clone().multiplyScalar(0.5 + 1.6 * scale).project(camera);
+      assert.ok(tail.y < -1, `tail visible at ${degrees}°, FOV ${fov}`);
+      if (referenceTipY == null) referenceTipY = tip.y;
+      assert.ok(Math.abs(tip.y - referenceTipY) < 1e-9);
+    }
+  }
+});
 
 test('ski support rises with the ramp before the player reaches it', () => {
   const support = findSkiSupportRamp(track, { s: 23, lat: 0, airborne: false });
   assert.equal(support, ramp);
   assert.equal(skiSurfaceHeight(track, 23, 0, flatSnow, support), 0);
-  assert.ok(skiSurfaceHeight(track, 25, 0, flatSnow, support) > 0.2);
-  assert.equal(skiSurfaceHeight(track, 27, 0, flatSnow, support), 0.65);
+  assert.equal(skiSurfaceHeight(track, 25, 0, flatSnow, support), PARAMS.rampHeight / PARAMS.rampLength);
+  assert.equal(skiSurfaceHeight(track, 27, 0, flatSnow, support), PARAMS.rampHeight / 2);
 });
 
 test('support extends the takeoff plane past the lip, but the contact shadow does not', () => {
   const support = findSkiSupportRamp(track, { s: 29.8, lat: 0, airborne: false });
-  assert.ok(skiSurfaceHeight(track, 31, 0, flatSnow, support) > 1.3);
+  assert.ok(skiSurfaceHeight(track, 31, 0, flatSnow, support) > PARAMS.rampHeight);
   assert.equal(skiSurfaceHeight(track, 31, 0, flatSnow), 0);
   assert.equal(findSkiSupportRamp(track, { s: 30.1, lat: 0, airborne: true }), null);
 });
@@ -24,7 +48,7 @@ test('bypassing a ramp preserves snow height; shoulders interpolate onto snow', 
   assert.equal(skiSurfaceHeight(track, 27, 5, flatSnow), 0);
   assert.equal(findSkiSupportRamp(track, { s: 27, lat: 5, airborne: false }), null);
   const shoulder = skiSurfaceHeight(track, 27, 3.9, flatSnow);
-  assert.ok(shoulder > 0 && shoulder < 0.65);
+  assert.ok(shoulder > 0 && shoulder < PARAMS.rampHeight / 2);
 });
 
 test('wide angle reduces visible ski reach instead of extending it at speed', () => {

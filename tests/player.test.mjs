@@ -338,6 +338,28 @@ test('the player lands after a jump', () => {
   assert.equal(st.height, 0);
 });
 
+test('a maximum-speed jump stays low and lands quickly', () => {
+  const jump = track.obstacles.find((o) => o.type === 'jump');
+  let st = { ...createPlayerState(), s: jump.s - 3, lat: jump.lat, speed: PARAMS.maxSpeed };
+  const dt = 1 / 60;
+  let airborneFor = 0;
+  let maxHeight = 0;
+  let launched = false;
+  for (let t = 0; t < 2; t += dt) {
+    st = stepPlayer(st, 0, dt, track);
+    if (st.airborne) {
+      launched = true;
+      airborneFor += dt;
+      maxHeight = Math.max(maxHeight, st.height);
+    } else if (launched) {
+      break;
+    }
+  }
+  assert.equal(launched, true);
+  assert.ok(maxHeight < 1.5, `maxHeight=${maxHeight}`);
+  assert.ok(airborneFor < 0.9, `airborneFor=${airborneFor}`);
+});
+
 test('coasting straight through a curve drifts toward the outside (curvature/heading sign contract)', () => {
   // Self-locating: scan for the first s with sustained curvature so this survives track tweaks.
   let s0 = null;

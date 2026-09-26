@@ -59,5 +59,6 @@ export function buildTrack(data) {
 
   const obstacles = data.obstacles.map((o) => ({ ...o, s: o.t * length, lat: o.offset }));
 
-  return { curve, length, width: data.width, frameAt, toWorld, obstacles, data };
+  const gates = (data.gates || []).map((g, i) => ({ ...g, id: i + 1, s: g.t * length, lat: g.offset }));
+  return { curve, length, width: data.width, frameAt, toWorld, obstacles, gates, data };
 }
