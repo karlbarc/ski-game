@@ -10,7 +10,7 @@ import {
 } from './race.js?v=1784480748';
 import { createControls } from './controls.js?v=1784480748';
 import { createHud } from './hud.js?v=1784480748';
-import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank, isPlayerNameAvailable } from './ranking.js?v=1784480748';
+import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank, claimPlayerName } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
 import { authenticatedPlayerName, normalizePlayerName, MIN_PLAYER_NAME_LENGTH } from './player-profile.js';
 import { clearPendingScore, loadPendingScore, savePendingScore } from './pending-score.js';
@@ -259,9 +259,9 @@ async function validateAndContinueName(name) {
   errorElement.textContent = 'Comprobando disponibilidad…';
   nameInput.removeAttribute('aria-invalid');
   try {
-    const available = await isPlayerNameAvailable(normalizedName);
+    const claimed = await claimPlayerName(normalizedName);
     if (checkToken !== nameCheckToken) return false;
-    if (!available) {
+    if (!claimed) {
       errorElement.textContent = 'Ese nombre de usuario ya está en uso. Elige otro.';
       nameInput.setAttribute('aria-invalid', 'true');
       nameInput.focus();
@@ -803,8 +803,8 @@ async function restoreAndPublishPendingScore(pendingScore, user) {
   status.textContent = 'Validando y subiendo tu resultado…';
   rankStatus.textContent = 'Calculando tu posición…';
   try {
-    const available = await isPlayerNameAvailable(pendingScore.name);
-    if (!available) throw new Error('Ese nombre de usuario ya está en uso. Elige otro antes de publicar.');
+    const claimed = await claimPlayerName(pendingScore.name);
+    if (!claimed) throw new Error('Ese nombre de usuario ya está en uso. Elige otro antes de publicar.');
     await submitScore({
       track: pendingScore.track,
       name: pendingScore.name,

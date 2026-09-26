@@ -96,11 +96,11 @@ test('scores are submitted through the validating Edge Function', async () => {
     options: { body: { track: 'Verde', name: 'Snow', timeSec: 65, speedKmh: 85 } },
   }]);
 });
-test('user name availability is checked by the database', async () => {
+test('a user name is claimed by the account in the database', async () => {
   const { api, invocations } = ranking(null);
-  assert.equal(await api.isPlayerNameAvailable('  Montañista Andino  '), true);
+  assert.equal(await api.claimPlayerName('  Montañista Andino  '), true);
   assert.deepEqual(invocations, [{
-    name: 'is_player_name_available',
+    name: 'claim_player_name',
     options: { candidate_name: 'Montañista Andino' },
   }]);
 });

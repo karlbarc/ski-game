@@ -11,4 +11,4 @@ export function playerName(storage = localStorage) {
 export function savePlayerName(name, storage = localStorage) {
   storage.setItem('ski-player-name', normalizePlayerName(name));
 }
-export const { submitScore, fetchTop, fetchMyRank, isPlayerNameAvailable } = createRankingApi(supabase);
+export const { submitScore, fetchTop, fetchMyRank, claimPlayerName } = createRankingApi(supabase);

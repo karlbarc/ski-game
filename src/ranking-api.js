@@ -13,8 +13,8 @@ export function createRankingApi(client) {
       });
       if (error) throw new Error('No se pudo publicar la marca. Comprueba que el tiempo sea válido e inténtalo de nuevo.');
     },
-    async isPlayerNameAvailable(name) {
-      const { data, error } = await client.rpc('is_player_name_available', {
+    async claimPlayerName(name) {
+      const { data, error } = await client.rpc('claim_player_name', {
         candidate_name: name.trim().slice(0, 20),
       });
       if (error) throw error;
