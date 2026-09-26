@@ -30,6 +30,18 @@ Deno.serve(async (request) => {
     return json({ error: 'Inicia sesión con Google.' }, 401);
   }
 
+  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+  const { data: allowed, error: rateError } = await admin.rpc('consume_score_rate_limit', {
+    target_player_id: user.id,
+  });
+  if (rateError) {
+    console.error('submit-score rate limit failed', rateError.code);
+    return json({ error: 'No se pudo comprobar el límite de envíos.' }, 500);
+  }
+  if (!allowed) {
+    return json({ error: 'Demasiados envíos. Espera antes de volver a publicar.' }, 429);
+  }
+
   let score;
   try {
     score = validateScore(await request.json());
@@ -37,7 +49,6 @@ Deno.serve(async (request) => {
     return json({ error: error instanceof Error ? error.message : 'Solicitud inválida.' }, 400);
   }
 
-  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
   const { error } = await admin.from('scores').upsert({ player_id: user.id, ...score }, {
     onConflict: 'track,player_id',
   });
