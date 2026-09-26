@@ -2,24 +2,27 @@
 do $$
 declare
   player uuid := 'a6599077-7a44-42a1-960f-bb50f47fb720';
+  request_number integer;
 begin
-  if not public.consume_score_rate_limit(player) then raise exception 'request 1 denied'; end if;
-  if not public.consume_score_rate_limit(player) then raise exception 'request 2 denied'; end if;
-  if not public.consume_score_rate_limit(player) then raise exception 'request 3 denied'; end if;
-  if public.consume_score_rate_limit(player) then raise exception 'request 4 allowed'; end if;
+  for request_number in 1..5 loop
+    if not public.consume_score_rate_limit(player) then
+      raise exception 'request % denied', request_number;
+    end if;
+  end loop;
+  if public.consume_score_rate_limit(player) then raise exception 'request 6 allowed'; end if;
 
   update public.score_rate_limits
-  set window_started_at = clock_timestamp() - interval '2 minutes', request_count = 3
+  set window_started_at = clock_timestamp() - interval '2 minutes', request_count = 5
   where player_id = player and window_name = 'minute';
   if not public.consume_score_rate_limit(player) then raise exception 'new minute denied'; end if;
 
   update public.score_rate_limits
-  set request_count = 30
+  set request_count = 60
   where player_id = player and window_name = 'hour';
   update public.score_rate_limits
   set window_started_at = clock_timestamp() - interval '2 minutes'
   where player_id = player and window_name = 'minute';
-  if public.consume_score_rate_limit(player) then raise exception 'hour request 31 allowed'; end if;
+  if public.consume_score_rate_limit(player) then raise exception 'hour request 61 allowed'; end if;
 end $$;
 
 set local role authenticated;
