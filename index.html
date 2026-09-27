@@ -328,6 +328,10 @@
   .navigation-profile:hover { border-color: #b8efdc !important; transform: translateY(-1px); }
   .navigation-profile img { width: 100%; height: 100%; object-fit: cover; }
   .navigation-profile-fallback { font-size: 1.15rem; }
+  body:has(#track-screen.visible) #btn-mute-menu,
+  body:has(#rank-screen.visible) #btn-mute-menu {
+    right: max(74px, calc(env(safe-area-inset-right) + 74px));
+  }
   #profile-screen { z-index: 30; background: rgba(4, 17, 28, .82); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .profile-panel {
     position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 16px;

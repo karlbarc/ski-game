@@ -44,3 +44,18 @@ proceden del navegador. La validación de partidas y límites de frecuencia son
 trabajo adicional si se necesita un ranking resistente a trampas.
 
 Referencia: [documentación oficial de Supabase](https://supabase.com/docs/guides/auth/social-login/auth-google).
+
+## Despliegue automático de Supabase
+
+Cada push a `main` ejecuta `.github/workflows/deploy-supabase.yml`: aplica las
+migraciones pendientes y, si terminan correctamente, despliega todas las Edge
+Functions en el proyecto `mvhsepsnncfviwizxmcy`. El workflow también se puede
+ejecutar manualmente desde GitHub Actions.
+
+Configura estos secretos en el environment `production` del repositorio:
+
+- `SUPABASE_ACCESS_TOKEN`: token personal creado en Supabase Account → Access Tokens.
+- `SUPABASE_DB_PASSWORD`: contraseña de la base de datos del proyecto.
+
+El workflow no cancela despliegues que ya estén en curso, para evitar interrumpir
+una migración a mitad de la ejecución.
