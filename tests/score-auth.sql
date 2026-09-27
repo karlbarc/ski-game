@@ -7,6 +7,9 @@ do $$ begin
   if has_column_privilege(current_user, 'public.scores', 'meta', 'SELECT') then
     raise exception 'anonymous metadata must be private';
   end if;
+  if not has_column_privilege(current_user, 'public.scores', 'avatar_url', 'SELECT') then
+    raise exception 'anonymous users must be able to read ranking avatars';
+  end if;
   if has_any_column_privilege(current_user, 'public.scores', 'INSERT')
     or has_any_column_privilege(current_user, 'public.scores', 'UPDATE') then
     raise exception 'anonymous users must not be able to write scores';
@@ -22,6 +25,9 @@ select set_config('request.jwt.claims', '{"sub":"a6599077-7a44-42a1-960f-bb50f47
 do $$ begin
   if has_column_privilege(current_user, 'public.scores', 'meta', 'SELECT') then
     raise exception 'authenticated metadata must be private';
+  end if;
+  if not has_column_privilege(current_user, 'public.scores', 'avatar_url', 'SELECT') then
+    raise exception 'authenticated users must be able to read ranking avatars';
   end if;
   if has_any_column_privilege(current_user, 'public.scores', 'INSERT')
     or has_any_column_privilege(current_user, 'public.scores', 'UPDATE') then

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SCORE_RANGES_CS, validateScore } from '../supabase/functions/submit-score/score-validation.js';
+import { googleProfileAvatar } from '../supabase/functions/submit-score/profile-validation.js';
 
 test('every public track has an explicit accepted time range', () => {
   assert.deepEqual(Object.keys(SCORE_RANGES_CS).sort(), [
@@ -27,4 +28,19 @@ test('unknown tracks and implausible values are rejected', () => {
 test('user names may contain up to 20 characters', () => {
   const name = '12345678901234567890';
   assert.equal(validateScore({ track: 'Verde', name, timeSec: 60, speedKmh: 80 }).name, name);
+});
+
+test('ranking avatars only accept HTTPS images served by Google', () => {
+  assert.equal(
+    googleProfileAvatar({ avatar_url: 'https://lh3.googleusercontent.com/a/photo' }),
+    'https://lh3.googleusercontent.com/a/photo',
+  );
+  assert.equal(
+    googleProfileAvatar({ picture: 'https://lh4.googleusercontent.com/a/other' }),
+    'https://lh4.googleusercontent.com/a/other',
+  );
+  assert.equal(googleProfileAvatar({ avatar_url: 'http://lh3.googleusercontent.com/a/photo' }), null);
+  assert.equal(googleProfileAvatar({ avatar_url: 'https://googleusercontent.com.evil.example/photo' }), null);
+  assert.equal(googleProfileAvatar({ avatar_url: 'https://example.com/photo' }), null);
+  assert.equal(googleProfileAvatar({}), null);
 });

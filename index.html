@@ -273,6 +273,11 @@
   .rank-track h2 small { color: #a9c8d8; font-size: .75rem; font-family: system-ui, sans-serif; font-weight: 650; }
   .rank-row { display: flex; justify-content: space-between; gap: 20px; font-size: 1rem; font-variant-numeric: tabular-nums; padding: 8px 2px; }
   .rank-row.me { color: #ffdd57; font-weight: 700; }
+  .rank-player { display: flex; align-items: center; min-width: 0; gap: 9px; }
+  .rank-place { flex: 0 0 2.1em; text-align: right; }
+  .rank-avatar { flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid rgba(217, 240, 252, .28); border-radius: 50%; object-fit: cover; background: #102a3c; }
+  .rank-avatar-fallback { display: grid; place-items: center; color: #d9edf6; font-size: .9rem; }
+  .rank-player-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rank-empty { font-size: .95rem; color: #b9d1df; text-align: left; }
   .rank-empty-state { width: min(100%, 540px); margin: 30px auto 0; padding: 34px; border: 1px solid rgba(217,240,252,.15); border-radius: 22px; background: rgba(9,31,47,.72); text-align: center; }
   .rank-empty-icon { display: block; margin-bottom: 13px; font-size: 2.3rem; }
@@ -301,6 +306,8 @@
   #name-error:empty { display: none; }
   #name-error { color: #ffcf9e; }
   .auth-panel { display: grid; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid #64879b; margin-bottom: 6px; }
+  .auth-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  #auth-avatar { flex: 0 0 auto; width: 42px; height: 42px; border: 2px solid #ffffff40; border-radius: 50%; object-fit: cover; background: #071c2b; }
   #btn-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; border-radius: 12px; font: 600 16px system-ui, sans-serif; padding: 14px 18px; }
   #auth-status { overflow-wrap: anywhere; font-size: .85rem; color: #bbcedb; }
   #guest-warning { padding: 10px 12px !important; border: 1px solid #ffd16666; border-radius: 10px; background: #ffd16614 !important; color: #ffe7a3; font-size: .88rem; font-weight: 700; line-height: 1.4; }
@@ -312,6 +319,36 @@
   .overlay button small { font-size: .85rem; line-height: 1.45; margin-top: 6px; }
   .overlay button.text-button { background: transparent; border: none; color: #b9d6e5; }
   #track-screen, #rank-screen { justify-content: flex-start; padding-top: max(64px, env(safe-area-inset-top)); }
+  .navigation-profile {
+    position: fixed; top: max(14px, env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right));
+    z-index: 12; display: grid; place-items: center; width: 46px !important; min-width: 46px; height: 46px;
+    min-height: 46px !important; padding: 0 !important; overflow: hidden; border: 2px solid rgba(255,255,255,.65) !important;
+    border-radius: 50% !important; background: #102a3c !important; box-shadow: 0 8px 22px rgba(2,15,25,.35) !important;
+  }
+  .navigation-profile:hover { border-color: #b8efdc !important; transform: translateY(-1px); }
+  .navigation-profile img { width: 100%; height: 100%; object-fit: cover; }
+  .navigation-profile-fallback { font-size: 1.15rem; }
+  #profile-screen { z-index: 30; background: rgba(4, 17, 28, .82); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .profile-panel {
+    position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 16px;
+    width: min(100%, 430px); padding: 30px; text-align: left; border: 1px solid rgba(222,241,251,.22);
+    border-radius: 26px; background: linear-gradient(150deg, rgba(24,61,82,.99), rgba(8,29,45,.99));
+    box-shadow: 0 28px 70px rgba(3,15,25,.5);
+  }
+  .profile-heading { display: flex; align-items: center; gap: 15px; padding-right: 42px; }
+  .profile-avatar-wrap { display: grid; place-items: center; flex: 0 0 auto; width: 68px; height: 68px; overflow: hidden; border: 2px solid rgba(255,255,255,.45); border-radius: 50%; background: #071c2b; }
+  #profile-avatar { width: 100%; height: 100%; object-fit: cover; }
+  #profile-avatar-fallback { font-size: 1.65rem; }
+  .profile-heading h1 { font-size: 1.65rem; }
+  #profile-email { margin-top: 4px; color: #b9d6e5; font-size: .84rem; overflow-wrap: anywhere; }
+  #btn-close-profile { position: absolute; top: 14px; right: 14px; min-width: 42px; min-height: 42px; padding: 0; color: #d9edf6; border: 0; background: transparent; font-size: 1.65rem; }
+  #profile-form { display: grid; gap: 10px; padding-top: 15px; border-top: 1px solid rgba(217,240,252,.15); }
+  #profile-form label { font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #a9cad9; }
+  #profile-name { width: 100%; min-height: 52px; padding: 12px 15px; color: #fff; border: 1px solid #64879b; border-radius: 12px; background: #071c2b; font: inherit; font-size: 1rem; user-select: text; -webkit-user-select: text; }
+  #profile-status { min-height: 1.35em; color: #b8efdc; font-size: .84rem; }
+  #profile-status.error { color: #ffcf9e; }
+  #btn-save-profile { background: #b8efdc; color: #102c32; }
+  #btn-profile-signout { color: #ffd2bd; border-color: rgba(255,180,145,.28); background: rgba(120,48,37,.22); }
   .menu-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 28px; width: min(100%, 1080px); text-align: left; }
   .menu-header-copy { min-width: 0; }
   .menu-header h1 { margin: 8px 0; }
@@ -470,7 +507,10 @@
     <span class="eyebrow">TU PRÓXIMA BAJADA EMPIEZA AQUÍ</span>
     <div class="auth-panel">
       <button id="btn-google" type="button" disabled>Continuar con Google</button>
-      <p id="auth-status" role="status">Comprobando sesión…</p>
+      <div class="auth-identity">
+        <img id="auth-avatar" alt="" referrerpolicy="no-referrer" hidden>
+        <p id="auth-status" role="status">Comprobando sesión…</p>
+      </div>
       <button id="btn-signout" type="button" class="text-button" hidden>Cerrar sesión</button>
       <p id="auth-error" role="alert"></p>
     </div>
@@ -491,6 +531,7 @@
   </div>
 </div>
 <div id="track-screen" class="overlay">
+  <button type="button" class="navigation-profile" data-profile-open aria-label="Abrir perfil" hidden><img data-navigation-avatar alt="" referrerpolicy="no-referrer" hidden><span class="navigation-profile-fallback" aria-hidden="true">⛷</span></button>
   <header class="menu-header">
     <div class="menu-header-copy"><span class="eyebrow">ELIGE TU PRÓXIMO DESAFÍO</span><h1>Explora la montaña</h1><p id="player-greeting"></p></div>
     <div class="menu-actions"><button id="btn-back-controls">‹ Inicio</button><button id="btn-change-controls">🎮 Cambiar controles</button><button id="btn-ranking">🏆 Ranking</button></div>
@@ -504,6 +545,7 @@
   </section>
 </div>
 <div id="rank-screen" class="overlay">
+  <button type="button" class="navigation-profile" data-profile-open aria-label="Abrir perfil" hidden><img data-navigation-avatar alt="" referrerpolicy="no-referrer" hidden><span class="navigation-profile-fallback" aria-hidden="true">⛷</span></button>
   <header class="rank-header">
     <div class="rank-header-copy">
       <span class="eyebrow">COMPITE CONTRA LA MONTAÑA</span>
@@ -513,6 +555,22 @@
     <button id="btn-back-tracks">‹ Volver</button>
   </header>
   <div id="rank-list"></div>
+</div>
+<div id="profile-screen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+  <section class="profile-panel">
+    <button id="btn-close-profile" type="button" aria-label="Cerrar perfil">×</button>
+    <div class="profile-heading">
+      <span class="profile-avatar-wrap"><img id="profile-avatar" alt="" referrerpolicy="no-referrer" hidden><span id="profile-avatar-fallback" aria-hidden="true">⛷</span></span>
+      <div><span class="eyebrow">TU CUENTA</span><h1 id="profile-title">Perfil</h1><p id="profile-email"></p></div>
+    </div>
+    <form id="profile-form">
+      <label for="profile-name">Nombre público</label>
+      <input id="profile-name" name="profile-name" type="text" minlength="2" maxlength="20" required autocomplete="nickname" aria-describedby="profile-status">
+      <p id="profile-status" role="status" aria-live="polite"></p>
+      <button id="btn-save-profile" type="submit">Guardar nombre</button>
+    </form>
+    <button id="btn-profile-signout" type="button">Cerrar sesión</button>
+  </section>
 </div>
 <div id="finish-screen" class="overlay">
   <section class="finish-panel" aria-labelledby="finish-title">

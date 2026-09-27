@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAuthController } from '../src/auth-controller.js';
 import { createRankingApi } from '../src/ranking-api.js';
-import { authenticatedPlayerName } from '../src/player-profile.js';
+import { authenticatedPlayerAvatar, authenticatedPlayerName } from '../src/player-profile.js';
 
 function setup(href = 'https://game.example/?track=azul') {
   const state = { session: null, urls: [], exchanges: [] };
@@ -24,6 +24,7 @@ test('Google sign-in returns only to the current origin and path', async () => {
   await controller.signIn();
   assert.equal(state.options.provider, 'google');
   assert.equal(state.options.options.redirectTo, 'https://game.example/ski/');
+  assert.equal(state.options.options.scopes, 'openid email profile');
 });
 
 test('PKCE callback exchanges code, restores session and removes code from URL', async () => {
@@ -76,6 +77,20 @@ test('a first Google login derives a nickname of at most 20 characters from the 
   assert.equal(authenticatedPlayerName(user), 'Montañista Andino');
   assert.equal(authenticatedPlayerName({ user_metadata: { given_name: 'Montañista de la Patagonia' } }), 'Montañista de la Pat');
   assert.equal(authenticatedPlayerName({ email: 'skier@example.com', user_metadata: {} }), 'skier');
+});
+
+test('Google profile pictures are read from known metadata and unsafe URLs are rejected', () => {
+  assert.equal(
+    authenticatedPlayerAvatar({ user_metadata: { avatar_url: 'https://lh3.googleusercontent.com/a/photo' } }),
+    'https://lh3.googleusercontent.com/a/photo',
+  );
+  assert.equal(
+    authenticatedPlayerAvatar({ user_metadata: { picture: 'https://lh4.googleusercontent.com/a/other' } }),
+    'https://lh4.googleusercontent.com/a/other',
+  );
+  assert.equal(authenticatedPlayerAvatar({ user_metadata: { avatar_url: 'http://lh3.googleusercontent.com/a/photo' } }), '');
+  assert.equal(authenticatedPlayerAvatar({ user_metadata: { avatar_url: 'https://example.com/photo' } }), '');
+  assert.equal(authenticatedPlayerAvatar(null), '');
 });
 
 function ranking(user) {

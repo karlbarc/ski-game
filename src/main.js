@@ -12,7 +12,9 @@ import { createControls, loadControlMode, saveControlMode } from './controls.js?
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank, claimPlayerName } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
-import { authenticatedPlayerName, normalizePlayerName, MIN_PLAYER_NAME_LENGTH } from './player-profile.js';
+import {
+  authenticatedPlayerAvatar, authenticatedPlayerName, normalizePlayerName, MIN_PLAYER_NAME_LENGTH,
+} from './player-profile.js';
 import { clearPendingScore, loadPendingScore, savePendingScore } from './pending-score.js';
 import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose, skiEyeOffset } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
@@ -211,13 +213,147 @@ let sessionName = '';
 let racePlayerId = null;
 const googleButton = document.getElementById('btn-google');
 const signoutButton = document.getElementById('btn-signout');
+const authAvatar = document.getElementById('auth-avatar');
 const authError = document.getElementById('auth-error');
+const profileScreen = document.getElementById('profile-screen');
+const profileNameInput = document.getElementById('profile-name');
+const profileStatus = document.getElementById('profile-status');
+const navigationProfileButtons = [...document.querySelectorAll('[data-profile-open]')];
 const mobileControls = /Android|iPhone|iPad|iPod/.test(navigator.userAgent)
   || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let authAutoAdvanceDone = false;
 let nameCheckToken = 0;
 let currentGuestResult = null;
 let pendingScoreRestoreStarted = false;
+let profileReturnFocus = null;
+
+authAvatar.addEventListener('error', () => {
+  authAvatar.hidden = true;
+  authAvatar.removeAttribute('src');
+});
+
+function setProfileImage(img, fallback, avatarUrl) {
+  if (avatarUrl) {
+    img.src = avatarUrl;
+    img.hidden = false;
+    fallback.hidden = true;
+  } else {
+    img.hidden = true;
+    img.removeAttribute('src');
+    fallback.hidden = false;
+  }
+}
+
+function updateNavigationProfile(user, avatarUrl) {
+  for (const button of navigationProfileButtons) {
+    button.hidden = !user;
+    button.setAttribute('aria-label', `Abrir perfil de ${sessionName || user?.email || 'Google'}`);
+    setProfileImage(
+      button.querySelector('[data-navigation-avatar]'),
+      button.querySelector('.navigation-profile-fallback'),
+      avatarUrl,
+    );
+  }
+  setProfileImage(
+    document.getElementById('profile-avatar'),
+    document.getElementById('profile-avatar-fallback'),
+    avatarUrl,
+  );
+  document.getElementById('profile-email').textContent = user?.email || '';
+  if (!user) profileScreen.classList.remove('visible');
+}
+
+for (const img of document.querySelectorAll('[data-navigation-avatar], #profile-avatar')) {
+  img.addEventListener('error', () => {
+    img.hidden = true;
+    img.removeAttribute('src');
+    if (img.nextElementSibling) img.nextElementSibling.hidden = false;
+  });
+}
+
+function closeProfile() {
+  profileScreen.classList.remove('visible');
+  profileReturnFocus?.focus({ preventScroll: true });
+  profileReturnFocus = null;
+}
+
+function openProfile(event) {
+  const user = auth.user();
+  if (!user) return;
+  profileReturnFocus = event.currentTarget;
+  profileNameInput.value = sessionName || playerName() || authenticatedPlayerName(user);
+  profileNameInput.removeAttribute('aria-invalid');
+  profileStatus.textContent = '';
+  profileStatus.classList.remove('error');
+  profileScreen.classList.add('visible');
+  profileNameInput.focus({ preventScroll: true });
+  profileNameInput.select();
+}
+
+for (const button of navigationProfileButtons) button.addEventListener('click', openProfile);
+document.getElementById('btn-close-profile').addEventListener('click', closeProfile);
+profileScreen.addEventListener('pointerdown', (event) => {
+  if (event.target === profileScreen) closeProfile();
+});
+
+document.getElementById('profile-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const name = normalizePlayerName(profileNameInput.value);
+  profileStatus.classList.remove('error');
+  profileNameInput.removeAttribute('aria-invalid');
+  if (name.length < MIN_PLAYER_NAME_LENGTH) {
+    profileStatus.textContent = 'El nombre debe tener al menos 2 caracteres.';
+    profileStatus.classList.add('error');
+    profileNameInput.setAttribute('aria-invalid', 'true');
+    return;
+  }
+  const saveButton = document.getElementById('btn-save-profile');
+  saveButton.disabled = true;
+  profileStatus.textContent = 'Guardando…';
+  try {
+    const claimed = await claimPlayerName(name);
+    if (!claimed) throw new Error('Ese nombre ya está en uso. Elige otro.');
+    sessionName = name;
+    savePlayerName(name);
+    nameInput.value = name;
+    profileNameInput.value = name;
+    document.getElementById('player-greeting').textContent = `${name}, elige la categoría que quieres jugar.`;
+    for (const button of navigationProfileButtons) button.setAttribute('aria-label', `Abrir perfil de ${name}`);
+    profileStatus.textContent = 'Nombre actualizado.';
+    if (document.getElementById('rank-screen').classList.contains('visible')) {
+      if (rankDetailOpen) showTrackRanking(selectedTrack);
+      else showRanking();
+    }
+  } catch (error) {
+    profileStatus.textContent = error.message || 'No pudimos guardar el nombre.';
+    profileStatus.classList.add('error');
+    profileNameInput.setAttribute('aria-invalid', 'true');
+  } finally {
+    saveButton.disabled = false;
+  }
+});
+
+document.getElementById('btn-profile-signout').addEventListener('click', async () => {
+  const button = document.getElementById('btn-profile-signout');
+  button.disabled = true;
+  profileStatus.classList.remove('error');
+  profileStatus.textContent = 'Cerrando sesión…';
+  try {
+    await auth.signOut();
+    sessionName = '';
+    started = false;
+    profileScreen.classList.remove('visible');
+    document.getElementById('track-screen').classList.remove('visible');
+    document.getElementById('rank-screen').classList.remove('visible');
+    document.getElementById('start-screen').classList.add('visible');
+    showNameForm();
+  } catch (error) {
+    profileStatus.textContent = error.message;
+    profileStatus.classList.add('error');
+  } finally {
+    button.disabled = false;
+  }
+});
 
 function continueWithName(name) {
   sessionName = name;
@@ -286,6 +422,15 @@ async function validateAndContinueName(name) {
 }
 
 auth.subscribe((user) => {
+  const avatarUrl = authenticatedPlayerAvatar(user);
+  if (avatarUrl) {
+    authAvatar.src = avatarUrl;
+    authAvatar.hidden = false;
+  } else {
+    authAvatar.hidden = true;
+    authAvatar.removeAttribute('src');
+  }
+  updateNavigationProfile(user, avatarUrl);
   googleButton.hidden = !!user;
   signoutButton.hidden = !user;
   document.getElementById('auth-status').textContent = user
@@ -430,16 +575,32 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
 let rankDetailOpen = false;
 let rankViewToken = 0;
 
+document.getElementById('rank-list').addEventListener('error', (event) => {
+  if (!event.target.matches('img.rank-avatar')) return;
+  const fallback = document.createElement('span');
+  fallback.className = 'rank-avatar rank-avatar-fallback';
+  fallback.setAttribute('aria-hidden', 'true');
+  fallback.textContent = '⛷';
+  event.target.replaceWith(fallback);
+}, true);
+
 function rankRowsHtml(rows, mine, me) {
+  const playerHtml = (row, position) => {
+    const avatarUrl = authenticatedPlayerAvatar({ user_metadata: { avatar_url: row.avatar_url } });
+    const avatar = avatarUrl
+      ? `<img class="rank-avatar" src="${escapeHtml(avatarUrl)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+      : '<span class="rank-avatar rank-avatar-fallback" aria-hidden="true">⛷</span>';
+    return `<span class="rank-player"><span class="rank-place">${position}.</span>${avatar}<span class="rank-player-name">${escapeHtml(row.name)}</span></span>`;
+  };
   let body = rows.length === 0
     ? '<p class="rank-empty">Aún no hay tiempos. ¡Sé el primero!</p>'
     : rows.map((r, i) =>
-        `<div class="rank-row${r.player_id === me ? ' me' : ''}"><span>${i + 1}. ${escapeHtml(r.name)}</span><span>${formatTime(r.time_cs / 100)}</span></div>`)
+        `<div class="rank-row${r.player_id === me ? ' me' : ''}">${playerHtml(r, i + 1)}<span>${formatTime(r.time_cs / 100)}</span></div>`)
       .join('');
   // si tienes marca pero no estás entre los mostrados, tu posición al final
   if (mine && mine.rank > rows.length) {
     body += '<div class="rank-row"><span>⋯</span><span></span></div>'
-      + `<div class="rank-row me"><span>${mine.rank}. ${escapeHtml(mine.name)}</span><span>${formatTime(mine.time_cs / 100)}</span></div>`;
+      + `<div class="rank-row me">${playerHtml(mine, mine.rank)}<span>${formatTime(mine.time_cs / 100)}</span></div>`;
   }
   return body;
 }
@@ -663,6 +824,10 @@ function startRun(key) {
 }
 
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && profileScreen.classList.contains('visible')) {
+    closeProfile();
+    return;
+  }
   if (e.target?.closest?.('input, textarea, [contenteditable]')) return;
   if (e.key === 'Escape' || e.key.toLowerCase() === 'p') {
     if (paused) resumeGame();

@@ -23,8 +23,8 @@ guardan en Supabase, nunca en JavaScript, Vercel ni el repositorio.
    una bajada. Comprueba el ranking, recarga y prueba **Cerrar sesión**.
 
 El SDK guarda y renueva la sesión en el navegador y sincroniza el cierre entre
-pestañas. El ranking público contiene el apodo, identificador y puntuación; no
-expone el correo ni los metadatos del dispositivo. Los invitados pueden jugar y
+pestañas. El ranking público contiene el apodo, la foto de perfil de Google,
+el identificador y la puntuación; no expone el correo ni los metadatos del dispositivo. Los invitados pueden jugar y
 consultar marcas, pero no escribir. Las marcas antiguas siguen visibles y no se
 reclaman automáticamente: un UUID guardado en localStorage no acredita propiedad.
 Los mejores tiempos locales son del dispositivo; las marcas de Google pertenecen

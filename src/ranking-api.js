@@ -22,7 +22,7 @@ export function createRankingApi(client) {
     },
     async fetchTop(track, limit = 10) {
       const { data, error } = await client.from('scores')
-        .select('player_id,name,time_cs').eq('track', track).order('time_cs')
+        .select('player_id,name,time_cs,avatar_url').eq('track', track).order('time_cs')
         .limit(Math.min(50, Math.max(1, Math.trunc(limit) || 10)));
       if (error) throw error;
       return data;
@@ -32,7 +32,7 @@ export function createRankingApi(client) {
       if (authError) throw authError;
       const id = sessionData.session?.user?.id;
       if (!id) return null;
-      const { data, error } = await client.from('scores').select('name,time_cs')
+      const { data, error } = await client.from('scores').select('name,time_cs,avatar_url')
         .eq('track', track).eq('player_id', id).maybeSingle();
       if (error) throw error;
       if (!data) return null;

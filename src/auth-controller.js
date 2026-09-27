@@ -41,7 +41,11 @@ export function createAuthController(auth, page = window) {
       const url = new URL(page.location.href);
       const { error } = await auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: url.origin + url.pathname, queryParams: { prompt: 'select_account' } },
+        options: {
+          redirectTo: url.origin + url.pathname,
+          scopes: 'openid email profile',
+          queryParams: { prompt: 'select_account' },
+        },
       });
       if (error) throw new Error('No se pudo iniciar el acceso con Google. Inténtalo más tarde.');
     },

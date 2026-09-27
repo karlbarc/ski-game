@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.117.1';
 import { validateScore } from './score-validation.js';
+import { googleProfileAvatar } from './profile-validation.js';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,7 +60,8 @@ Deno.serve(async (request) => {
   }
   if (!nameClaimed) return json({ error: 'Ese nombre de usuario ya está en uso.' }, 409);
 
-  const { error } = await admin.from('scores').upsert({ player_id: user.id, ...score }, {
+  const avatar_url = googleProfileAvatar(user.user_metadata);
+  const { error } = await admin.from('scores').upsert({ player_id: user.id, avatar_url, ...score }, {
     onConflict: 'track,player_id',
   });
   if (error) {

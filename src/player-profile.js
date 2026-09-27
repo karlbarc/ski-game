@@ -13,3 +13,17 @@ export function authenticatedPlayerName(user, savedName = '') {
     || 'Esquiador';
   return normalizePlayerName(normalizePlayerName(savedName) || profileName || 'Esquiador');
 }
+
+export function authenticatedPlayerAvatar(user) {
+  const candidate = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
+  if (typeof candidate !== 'string') return '';
+  try {
+    const url = new URL(candidate);
+    const hostname = url.hostname.toLowerCase();
+    const isGoogleImage = hostname === 'googleusercontent.com'
+      || hostname.endsWith('.googleusercontent.com');
+    return url.protocol === 'https:' && isGoogleImage ? url.href : '';
+  } catch {
+    return '';
+  }
+}
