@@ -273,11 +273,11 @@
   .rank-track h2 small { color: #a9c8d8; font-size: .75rem; font-family: system-ui, sans-serif; font-weight: 650; }
   .rank-row { display: flex; justify-content: space-between; align-items: center; gap: 20px; font-size: 1rem; font-variant-numeric: tabular-nums; padding: 8px 2px; }
   .rank-row.me { color: #ffdd57; font-weight: 700; }
-  .rank-player { display: flex; align-items: center; min-width: 0; gap: 9px; }
+  .rank-player { display: flex; flex: 1 1 0; align-items: center; min-width: 0; gap: 9px; }
   .rank-place { flex: 0 0 2.1em; text-align: right; }
   .rank-avatar { flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid rgba(217, 240, 252, .28); border-radius: 50%; object-fit: cover; background: #102a3c; }
   .rank-avatar-fallback { display: grid; place-items: center; color: #d9edf6; font-size: .9rem; }
-  .rank-player-name { min-width: 0; overflow-wrap: anywhere; }
+  .rank-player-name { min-width: 0; overflow-wrap: break-word; }
   .rank-empty { font-size: .95rem; color: #b9d1df; text-align: left; }
   .rank-empty-state { width: min(100%, 540px); margin: 30px auto 0; padding: 34px; border: 1px solid rgba(217,240,252,.15); border-radius: 22px; background: rgba(9,31,47,.72); text-align: center; }
   .rank-empty-icon { display: block; margin-bottom: 13px; font-size: 2.3rem; }
@@ -380,7 +380,7 @@
   #track-screen #btn-change-controls { color: #dcecf4; background: rgba(25, 66, 88, .78); border: 1px solid #9fc2d355; }
   #track-screen #btn-ranking { color: #102c32; background: #b8efdc; border-color: #d5faed; }
   .rank-row span:first-child { overflow-wrap: anywhere; text-align: left; }
-  .rank-row > span:last-child { white-space: nowrap; }
+  .rank-row > span:last-child { flex: none; white-space: nowrap; }
   @media (max-width: 540px) {
     .rank-header { gap: 10px; }
     .menu-header { align-items: stretch; flex-direction: column; gap: 14px; }
