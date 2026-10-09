@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createSkier, poseSkier } from './skier.js';
+import { createSkier, poseSkier } from './skier.js?v=1791573180';
 import { splitStaticInstances } from './render-batches.js';
 import { lodPairs, updateLod } from './render-lod.js';
 import { createSunShadows } from './sun-shadows.js';

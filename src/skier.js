@@ -338,7 +338,7 @@ export function poseSkier(skier, { steer, airborne, fallen, dip = 0 }) {
   const neck = pelvis.clone().add(new THREE.Vector3(
     Math.sin(lean) * 0.35, Math.cos(lean) * 0.35, -0.44));
   hips.position.copy(pelvis);
-  hips.rotation.z = -lean * 0.7;
+  hips.rotation.set(0, 0, -lean * 0.7); // la caída inclina la cadera en los tres ejes
   torso.position.copy(pelvis);
   torso.scale.y = neck.distanceTo(pelvis) / 0.49;
   torso.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), neck.clone().sub(pelvis).normalize());
