@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { createSkier, poseSkier } from './skier.js';
 import { splitStaticInstances } from './render-batches.js';
+import { lodPairs, updateLod } from './render-lod.js';
+import { createSunShadows } from './sun-shadows.js';
 import { buildTrack, mulberry32 } from './track.js?v=1784480748';
 import { TRACKS, CATEGORIES, categoryTracks, trackProgress, trackRecordName } from './track-catalog.js';
 import { createPlayerState, stepPlayer, recoverPlayer, turnRateAtSpeed, playerViewHeading, PARAMS } from './player.js?v=1784480748';
@@ -78,25 +80,9 @@ scene.add(new THREE.HemisphereLight(0x8fb4e4, 0xeee2d0, 1.3)); // relleno frío:
 // Dirección común para la luz, el disco solar y la iluminación horneada de
 // las montañas. Más altura acorta las sombras sin volver la escena cenital.
 const SUN_OFFSET = new THREE.Vector3(100, 84, -30);
-const sun = new THREE.DirectionalLight(0xffe6b8, 3.1);
-sun.position.copy(SUN_OFFSET);
-sun.castShadow = true;
-// El sol sigue al jugador (ver updateCamera): el volumen de sombra es una caja
-// pequeña alrededor de la cámara, así se gana resolución donde de verdad se ve.
-sun.shadow.mapSize.set(LOW_END ? 512 : 2048, LOW_END ? 512 : 2048);
-// Caja de 160 m de lado: cubre lo que se ve con niebla y a 2048 px deja ~8 cm
-// por texel, suficiente para sombras de árbol nítidas sin artefactos.
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 400;
-sun.shadow.camera.left = -80;
-sun.shadow.camera.right = 80;
-sun.shadow.camera.top = 80;
-sun.shadow.camera.bottom = -80;
-sun.shadow.camera.updateProjectionMatrix(); // sin esto los límites de arriba no se aplican
-sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.35;
-scene.add(sun);
-scene.add(sun.target);
+// El sol sigue al jugador (ver updateCamera) con dos cajas de sombra: una de
+// 36 m nítida junto al esquiador y otra de 160 m para lo que se ve a lo lejos.
+const sunShadows = createSunShadows(scene, { offset: SUN_OFFSET, color: 0xffe6b8, intensity: 3.1, lowEnd: LOW_END });
 
 const SKI_TAIL = 0.85;
 const SKI_TIP = 1.60;
@@ -151,6 +137,10 @@ let track = null;
 let START_S = 15;
 let FINISH_S = 0;
 let worldGroup = null;
+let treeLods = [];
+// Distancia (al borde de cada sector de árboles) dentro de la que se dibujan
+// con todo el detalle; más allá usan el modelo ligero.
+const TREE_DETAIL_DISTANCE = LOW_END ? 25 : 40;
 let startGate = null;
 let startSequence = createStartSequence();
 let lastStartCue = null;
@@ -166,6 +156,7 @@ function loadTrack(data) {
   worldGroup.add(makeRibbon(track, -track.width / 2, track.width / 2, pisteSnow));
   worldGroup.add(makeRibbon(track, track.width / 2, track.width / 2 + 25, powderSnow));
   worldGroup.add(makeRibbon(track, -track.width / 2 - 25, -track.width / 2, powderSnow));
+  treeLods = [];
   worldGroup.add(makeTrees(track));
   worldGroup.add(makeRocks(track));
   worldGroup.add(makeRamps(track));
@@ -1070,12 +1061,9 @@ function updateCamera(visualDt) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
-  // El volumen de sombra viaja con el jugador, centrado un poco por delante
-  // (es donde mira la cámara), manteniendo el mismo ángulo de sol.
-  const focus = track.toWorld(player.s + 45, player.lat, 0);
-  sun.target.position.copy(focus);
-  // La luz sigue al jugador conservando un ángulo alpino más elevado.
-  sun.position.copy(focus).add(SUN_OFFSET);
+  // Los volúmenes de sombra viajan con el jugador manteniendo el ángulo del
+  // sol: el nítido a su alrededor y el amplio por delante, donde mira la cámara.
+  sunShadows.follow(track.toWorld(player.s + 8, player.lat, 0), track.toWorld(player.s + 45, player.lat, 0));
 
   skis.visible = !player.fallen;
   const lengthScale = cameraMode === 'rear' ? 1 : skiLengthScale(camera.fov);
@@ -1292,6 +1280,7 @@ function tick(now) {
   hud.setTimer(race.status === 'ready' ? '00:00.00' : formatTime(slalomResult(slalomState, race.elapsed).total), now);
   hud.setSpeed((player.fallen ? crashSpeed : player.speed) * 3.6, now);
   hud.setProgress(player.s, track.length, now);
+  updateLod(treeLods, camera.position, TREE_DETAIL_DISTANCE);
   renderer.render(scene, camera);
   if (started && !paused && startSequence.clockMs == null) {
     // El primer pitido y su segundo completo comienzan con la escena preparada.
@@ -1890,11 +1879,9 @@ function mergeGeometries(geometries) {
 // Abetos alpinos: ramas radiales descendentes, huecos entre pisos y una guía
 // central estrecha. Cada especie comparte geometría entre todos sus ejemplares.
 function treeSpecies() {
-  const build = (height, radius, seed) => {
+  const build = (height, radius, seed, tiers, branches) => {
     const rng = mulberry32(seed);
     const positions = [];
-    const tiers = LOW_END ? 7 : 10;
-    const branches = LOW_END ? 6 : 8;
     const triangle = (a, b, c) => positions.push(...a, ...c, ...b);
     for (let tier = 0; tier < tiers; tier++) {
       const t = tier / tiers;
@@ -1968,7 +1955,13 @@ function treeSpecies() {
     trunkGeo.setAttribute('color', new THREE.Float32BufferAttribute(bark, 3));
     return { foliageGeo, trunkGeo, trunkY: (height - 0.3) / 2 };
   };
-  return { standard: build(5.7, 1.5, 42), tall: build(7.4, 1.25, 81) };
+  // Modelo detallado para los árboles cercanos y uno de ~4x menos triángulos
+  // para los lejanos (ver TREE_DETAIL_DISTANCE).
+  const species = (height, radius, seed) => ({
+    ...build(height, radius, seed, LOW_END ? 7 : 10, LOW_END ? 6 : 8),
+    lowFoliageGeo: build(height, radius, seed, 4, 5).foliageGeo,
+  });
+  return { standard: species(5.7, 1.5, 42), tall: species(7.4, 1.25, 81) };
 }
 
 function buildTreeInstances(track, positions, species) {
@@ -2003,7 +1996,11 @@ function buildTreeInstances(track, positions, species) {
   foliage.receiveShadow = true;
   trunk.castShadow = true;
   trunk.receiveShadow = true;
-  return [...splitStaticInstances(foliage), ...splitStaticInstances(trunk)];
+  // El detalle se decide por sector (80 m) según la distancia a la cámara.
+  return {
+    lods: lodPairs(splitStaticInstances(foliage), species.lowFoliageGeo),
+    trunks: splitStaticInstances(trunk),
+  };
 }
 
 function makeTrees(track) {
@@ -2028,8 +2025,12 @@ function makeTrees(track) {
     (o.variant === 'tall' ? tall : standard).push({ s: o.s, lat: o.lat, scale: 1 });
   }
   const species = treeSpecies();
-  group.add(...buildTreeInstances(track, standard, species.standard));
-  group.add(...buildTreeInstances(track, tall, species.tall));
+  for (const { lods, trunks } of [buildTreeInstances(track, standard, species.standard),
+    buildTreeInstances(track, tall, species.tall)]) {
+    for (const { detail, low } of lods) group.add(detail, low);
+    group.add(...trunks);
+    treeLods.push(...lods);
+  }
   return group;
 }
 
