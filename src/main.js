@@ -21,7 +21,7 @@ import { clearPendingScore, loadPendingScore, savePendingScore } from './pending
 import { skiSurfaceHeight, findSkiSupportRamp, skiLengthScale, smoothSkiPose, skiEyeOffset } from './ski-surface.js';
 import { createStartSequence, presentStartSequence, stepPresentedStartSequence } from './start.js';
 import { landingStrength, landingMotion } from './landing.js';
-import { createSnowSound } from './audio.js?v=1789743651';
+import { createSnowSound } from './audio.js?v=1791568899';
 import { createSlalom, stepSlalom, slalomResult, slalomNotice, slalomPoleOffsets, SLALOM_FLAG_WIDTH } from './slalom.js';
 
 const query = new URLSearchParams(location.search);
@@ -729,6 +729,8 @@ function buildTrackMenu() {
       selectedCategory = category.id;
       buildTrackMenu();
       document.querySelectorAll('.category-choice')[CATEGORIES.indexOf(category)].focus({ preventScroll: true });
+      // En celular las categorías ocupan la pantalla: llevar las pistas a la vista.
+      document.getElementById('track-carousel').scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     });
     categories.appendChild(button);
   }
@@ -756,7 +758,7 @@ function buildTrackMenu() {
       <span class="track-best"><small>Tu mejor tiempo</small><strong>${best == null ? 'Sin marca todavía' : formatTime(best)}</strong></span>
       <span class="track-status">${progress.unlocked ? (progress.completed ? '✓ Completada' : 'Disponible') : `🔒 Completa ${progress.previous.name} para desbloquear`}</span>
       <span class="track-play"><span>${progress.unlocked ? 'Bajar esta pista' : 'Bloqueada'}</span><span class="track-play-arrow" aria-hidden="true">${progress.unlocked ? '→' : '🔒'}</span></span>`;
-    card.addEventListener('click', () => startRun(key));
+    card.addEventListener('click', () => (progress.unlocked ? startRun(key) : snow.locked()));
     list.appendChild(card);
   }
   list.scrollLeft = 0;

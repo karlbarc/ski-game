@@ -1,6 +1,9 @@
 // Sonido procedural de los skis deslizando sobre la nieve (Web Audio, sin assets).
 // Ruido blanco -> filtro paso banda -> ganancia; volumen y brillo siguen la velocidad
 // y el carving añade "raspado". Debe arrancarse desde un gesto del usuario (iOS).
+
+import { playLockSound } from './lock-sound.js';
+
 export function createSnowSound() {
   let ctx = null;
   let master = null; // volumen maestro: todo el audio pasa por aquí (mute global)
@@ -244,6 +247,11 @@ export function createSnowSound() {
       oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
       oscillator.start(t);
       oscillator.stop(t + duration);
+    },
+    // Aviso al tocar una pista bloqueada.
+    locked() {
+      if (!ctx || muted || bgHidden || document.hidden) return;
+      playLockSound(ctx, master);
     },
     // Golpe grave y crujido corto de nieve al aterrizar, según la caída.
     land(strength) {
