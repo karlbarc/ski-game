@@ -1225,6 +1225,7 @@ function tick(now) {
     if (race.status === 'running') runMaxSpeed = Math.max(runMaxSpeed, player.speed);
     if (player.fallen && !prev.fallen) {
       snow.ouch();
+      navigator.vibrate?.(200); // vibración al chocar (Android; iOS Safari no la soporta)
       bumpCounter('falls');
       if (AUTOPILOT) {
         player = recoverPlayer(player); // los runs de verificación se levantan solos
