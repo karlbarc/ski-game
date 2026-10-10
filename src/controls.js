@@ -4,6 +4,25 @@ export function combineSteer(...values) {
   return Math.max(-1, Math.min(1, out));
 }
 
+const STEER_ATTACK_RATE = 12;
+const STEER_RELEASE_RATE = 6;
+const BRAKE_RESPONSE_RATE = 15;
+
+// Responde rápido al iniciar o invertir un giro, pero conserva una salida
+// progresiva al soltarlo. La exponencial mantiene la misma sensación aunque
+// cambie el framerate.
+export function smoothSteer(current, target, dt, brake = 0) {
+  target = Math.max(-1, Math.min(1, target));
+  brake = Math.max(0, Math.min(1, brake));
+  const releasing = target === 0
+    || (Math.sign(target) === Math.sign(current) && Math.abs(target) < Math.abs(current));
+  const baseRate = releasing ? STEER_RELEASE_RATE : STEER_ATTACK_RATE;
+  // El frenado ya tenía una respuesta rápida; conservar su tasa máxima evita
+  // volverlo más brusco como efecto lateral de acelerar el giro normal.
+  const rate = baseRate + (BRAKE_RESPONSE_RATE - baseRate) * brake;
+  return current + (target - current) * -Math.expm1(-rate * Math.max(0, dt));
+}
+
 export const CONTROL_MODE_KEY = 'ski-control-mode';
 const CONTROL_MODES = new Set(['touch', 'swipe', 'gyro']);
 

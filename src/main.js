@@ -10,7 +10,7 @@ import {
   createRace, updateRace, pauseRace, resumeRace, formatTime,
   loadBest, saveBest, loadBestSpeed, saveBestSpeed,
 } from './race.js?v=1784480748';
-import { createControls, loadControlMode, saveControlMode } from './controls.js?v=1790467200';
+import { createControls, loadControlMode, saveControlMode, smoothSteer } from './controls.js?v=1791674264';
 import { createHud } from './hud.js?v=1784480748';
 import { playerId, playerName, savePlayerName, submitScore, fetchTop, fetchMyRank, claimPlayerName } from './ranking.js?v=1784480748';
 import { auth } from './auth.js';
@@ -180,7 +180,7 @@ let started = false;
 let finishShown = false;
 let finishResultToken = 0;
 let paused = false;
-let steerSmooth = 0; // input suavizado: entrada/salida de giro progresiva, estilo slalom
+let steerSmooth = 0; // input suavizado: ataque rápido y salida progresiva
 let runMaxSpeed = 0; // velocidad máxima de la bajada actual (m/s)
 let crashSpeed = 0;  // velocidad en el momento de la caída (se muestra congelada)
 
@@ -1207,7 +1207,7 @@ function tick(now) {
   if (started && !paused && startSequence.released && race.status !== 'finished') {
     const rawSteer = AUTOPILOT ? autopilotSteer() : controls.steer();
     const brake = AUTOPILOT ? 0 : controls.brake();
-    steerSmooth += (rawSteer - steerSmooth) * Math.min(1, dt * (3 + brake * 12));
+    steerSmooth = smoothSteer(steerSmooth, rawSteer, dt, brake);
     const prev = player;
     player = stepPlayer(player, steerSmooth, dt, track, PARAMS, brake);
     if (track.gates.length && race.status !== 'ready') {

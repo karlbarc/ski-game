@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  combineSteer, CONTROL_MODE_KEY, loadControlMode, saveControlMode,
+  combineSteer, CONTROL_MODE_KEY, loadControlMode, saveControlMode, smoothSteer,
 } from '../src/controls.js';
 
 test('combineSteer picks the strongest input and clamps to [-1, 1]', () => {
@@ -10,6 +10,26 @@ test('combineSteer picks the strongest input and clamps to [-1, 1]', () => {
   assert.equal(combineSteer(-0.5, 0.2), -0.5);
   assert.equal(combineSteer(2, 0), 1);
   assert.equal(combineSteer(-3, 0.1), -1);
+});
+
+test('steering reacts quickly without snapping and is stable across framerates', () => {
+  const firstFrame = smoothSteer(0, 1, 1 / 60);
+  assert.ok(firstFrame > 0.15 && firstFrame < 1, `firstFrame=${firstFrame}`);
+
+  let after50ms = 0;
+  for (let i = 0; i < 3; i++) after50ms = smoothSteer(after50ms, 1, 1 / 60);
+  assert.ok(after50ms > 0.45, `after50ms=${after50ms}`);
+
+  const released = smoothSteer(after50ms, 0, 1 / 60);
+  assert.ok(released > 0 && released < after50ms, `released=${released}`);
+
+  let reversed = 1;
+  for (let i = 0; i < 6; i++) reversed = smoothSteer(reversed, -1, 1 / 60);
+  assert.ok(reversed < 0, `reversed=${reversed}`);
+
+  const oneLongFrame = smoothSteer(0, -1, 1 / 30);
+  const twoShortFrames = smoothSteer(smoothSteer(0, -1, 1 / 60), -1, 1 / 60);
+  assert.ok(Math.abs(oneLongFrame - twoShortFrames) < 1e-12);
 });
 
 test('control selection persists only supported modes in browser storage', () => {
